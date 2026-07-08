@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(sudo nft add rule inet filter input tcp dport 3000 accept 2>&1)",
+      "Bash(nft list *)",
+      "Bash(dpkg -l)"
+    ]
+  }
+}
