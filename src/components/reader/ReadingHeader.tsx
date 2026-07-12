@@ -1,13 +1,13 @@
 "use client";
 
-import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, BookOpen, Home, Brain, Settings } from "lucide-react";
+import { PanelLeft, PanelRight, ChevronLeft, ChevronRight, BookOpen, Home, Brain, PanelBottom, Settings } from "lucide-react";
 import { useUIStore } from "@/stores/ui-store";
 import { useReadingStore } from "@/stores/reading-store";
 import { UserMenu } from "@/components/shared/UserMenu";
 import Link from "next/link";
 
 export function ReadingHeader() {
-  const { leftPanelOpen, rightPanelOpen, toggleLeftPanel, toggleRightPanel } = useUIStore();
+  const { leftPanelOpen, rightPanelOpen, toggleLeftPanel, toggleRightPanel, aiPanelPosition, toggleAiPanelPosition } = useUIStore();
   const { currentBook, currentChapter, chapters, setChapter } = useReadingStore();
 
   const chapterIndex = currentChapter?.index ?? 0;
@@ -70,6 +70,13 @@ export function ReadingHeader() {
           title="下一章"
         >
           <ChevronRight className="h-4 w-4" />
+        </button>
+        <button
+          onClick={toggleAiPanelPosition}
+          className="rounded p-1 hover:bg-[var(--accent)] hidden sm:block"
+          title={aiPanelPosition === "right" ? "切换到底部" : "切换到右侧"}
+        >
+          <PanelBottom className={`h-4 w-4 ${aiPanelPosition === "bottom" ? "text-[var(--primary)]" : ""}`} />
         </button>
         <button
           onClick={toggleRightPanel}

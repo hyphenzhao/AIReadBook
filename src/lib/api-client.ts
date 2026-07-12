@@ -8,6 +8,7 @@ export interface UploadResult {
   id: string;
   title: string;
   author: string | null;
+  coverUrl: string | null;
   language: string;
   totalChapters: number;
   chapters: Array<{

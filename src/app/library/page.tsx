@@ -1,16 +1,48 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
-import { Plus, Search, BookOpen, MoreHorizontal, Trash2, Compass } from "lucide-react";
+import { Plus, Search, BookOpen, MoreHorizontal, Trash2, Compass, Image } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserMenu } from "@/components/shared/UserMenu";
 import { useLibraryStore } from "@/stores/library-store";
+import { useUserStore } from "@/stores/user-store";
+import { useChatStore } from "@/stores/chat-store";
 
 export default function LibraryPage() {
-  const { books, removeBook } = useLibraryStore();
+  const { books, ready, load, removeBook, updateCover } = useLibraryStore();
+  const isLoggedIn = useUserStore(s => s.isLoggedIn);
+  const currentUser = useUserStore(s => s.currentUser);
+  const { sessions, deleteSession } = useChatStore();
   const [search, setSearch] = useState("");
+
+  // Auto-load from MySQL on first visit
+  useEffect(() => {
+    if (!ready && isLoggedIn && currentUser) {
+      load(currentUser.id);
+    }
+  }, [ready, isLoggedIn, currentUser, load]);
+
+  function handleDeleteBook(bookId: string, title: string) {
+    if (!confirm(`确定删除《${title}》吗？\n\n删除后该书的聊天记录、批注、知识卡片等数据也将被清除。`)) return;
+
+    // Cascade delete related data
+    const bookSessions = sessions.filter((s) => s.bookId === bookId);
+    bookSessions.forEach((s) => deleteSession(s.id));
+    removeBook(bookId);
+  }
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editingCoverId, setEditingCoverId] = useState<string | null>(null);
+
+  function handleCoverUpload(bookId: string, file: File) {
+    const reader = new FileReader();
+    reader.onload = () => {
+      updateCover(bookId, reader.result as string);
+      setEditingCoverId(null);
+    };
+    reader.readAsDataURL(file);
+  }
 
   const filtered = books.filter(
     (b) =>
@@ -85,42 +117,74 @@ export default function LibraryPage() {
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
             {filtered.map((book) => (
-              <Link
+              <div
                 key={book.id}
-                href={`/read/${book.id}`}
                 className="group relative rounded-lg border border-[var(--border)] bg-[var(--card)] p-4 transition-shadow hover:shadow-md"
               >
-                <div className="mb-3 flex aspect-[3/4] items-center justify-center rounded bg-[var(--accent)]">
-                  <BookOpen className="h-12 w-12 text-[var(--muted-foreground)]" />
-                </div>
+                <Link href={`/read/${book.id}`} className="block">
+                  {/* Cover */}
+                  <div className="mb-3 flex aspect-[3/4] items-center justify-center overflow-hidden rounded bg-[var(--accent)]">
+                    {book.coverUrl ? (
+                      <img src={book.coverUrl} alt={book.title} className="h-full w-full object-cover" />
+                    ) : (
+                      <BookOpen className="h-12 w-12 text-[var(--muted-foreground)]" />
+                    )}
+                  </div>
 
-                <h3 className="line-clamp-1 font-semibold">{book.title}</h3>
-                {book.author && (
-                  <p className="line-clamp-1 text-sm text-[var(--muted-foreground)]">
-                    {book.author}
+                  <h3 className="line-clamp-1 font-semibold">{book.title}</h3>
+                  {book.author && (
+                    <p className="line-clamp-1 text-sm text-[var(--muted-foreground)]">
+                      {book.author}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                    {book.totalChapters} 章
                   </p>
-                )}
-                <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                  {book.totalChapters} 章
-                </p>
+                </Link>
 
-                <button
-                  className="absolute right-3 top-3 cursor-pointer rounded p-1 opacity-0 transition-opacity hover:bg-[var(--accent)] group-hover:opacity-100"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (confirm(`确定删除《${book.title}》吗？`)) {
-                      removeBook(book.id);
-                    }
-                  }}
-                  title="删除"
-                >
-                  <Trash2 className="h-4 w-4 text-[var(--destructive)]" />
-                </button>
-              </Link>
+                {/* Actions */}
+                <div className="absolute right-3 top-3 flex gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setEditingCoverId(book.id);
+                      fileInputRef.current?.click();
+                    }}
+                    className="rounded p-1 hover:bg-[var(--accent)]"
+                    title="更换封面"
+                  >
+                    <Image className="h-4 w-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      handleDeleteBook(book.id, book.title);
+                    }}
+                    className="rounded p-1 hover:bg-[var(--accent)]"
+                    title="删除"
+                  >
+                    <Trash2 className="h-4 w-4 text-[var(--destructive)]" />
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         )}
+
+        {/* Hidden file input for cover upload */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={(e) => {
+            const file = e.target.files?.[0];
+            if (file && editingCoverId) handleCoverUpload(editingCoverId, file);
+            e.target.value = "";
+          }}
+        />
       </main>
     </div>
   );

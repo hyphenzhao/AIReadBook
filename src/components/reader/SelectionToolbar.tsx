@@ -34,10 +34,7 @@ export function SelectionToolbar({ selectedText, position, onClose }: SelectionT
   }
 
   function handleAskAI() {
-    // This will be handled by the AIPanel
-    window.dispatchEvent(
-      new CustomEvent("ask-ai", { detail: { selectedText } }),
-    );
+    useReadingStore.getState().triggerAskAI(selectedText);
     onClose();
   }
 

@@ -21,9 +21,14 @@ export default function RegisterPage() {
     setError("");
 
     try {
-      useUserStore.getState().login({
-        displayName: email.split("@")[0],
-        email,
+      const { apiRegister } = await import("@/lib/api-client-v2");
+      const user = await apiRegister(email, password, email.split("@")[0]);
+      if (user.error) { setError(user.error); setLoading(false); return; }
+
+      await useUserStore.getState().login({
+        id: user.id,
+        displayName: user.name || email.split("@")[0],
+        email: user.email,
         avatarUrl: null,
       });
       router.push("/library");

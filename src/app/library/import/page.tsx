@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useRef } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Upload, BookOpen, Loader2, CheckCircle, AlertCircle } from "lucide-react";
@@ -11,6 +11,7 @@ import { useLibraryStore } from "@/stores/library-store";
 export default function ImportPage() {
   const router = useRouter();
   const addBook = useLibraryStore((s) => s.addBook);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [fileName, setFileName] = useState("");
@@ -114,21 +115,25 @@ export default function ImportPage() {
               <p className="mt-1 text-sm text-[var(--muted-foreground)]">
                 或点击下方按钮选择文件
               </p>
-              <label className="mt-6 cursor-pointer">
-                <Button variant="outline" className="gap-2">
-                  <BookOpen className="h-4 w-4" />
-                  选择 EPUB 文件
-                </Button>
-                <input
-                  type="file"
-                  accept=".epub"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) handleFile(file);
-                  }}
-                />
-              </label>
+              <Button
+                variant="outline"
+                className="mt-6 gap-2"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <BookOpen className="h-4 w-4" />
+                选择 EPUB 文件
+              </Button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".epub"
+                className="hidden"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFile(file);
+                  e.target.value = "";
+                }}
+              />
             </>
           )}
         </div>

@@ -2,25 +2,20 @@ import { create } from "zustand";
 import type { Book, Chapter, ChatMode } from "@/types";
 
 interface ReadingState {
-  // Current book context
   currentBook: Book | null;
   currentChapter: Chapter | null;
   chapters: Chapter[];
-
-  // Reading position
   cfi: string;
   percentage: number;
-
-  // View settings
   fontSize: number;
   lineHeight: number;
   fontFamily: string;
   viewMode: "scroll" | "paginated";
-
-  // AI mode
   aiMode: ChatMode;
 
-  // Actions
+  // "Ask AI" event bus — replaces broken CustomEvent
+  pendingAskAI: string | null;
+
   setBook: (book: Book) => void;
   setChapters: (chapters: Chapter[]) => void;
   setChapter: (chapter: Chapter) => void;
@@ -30,6 +25,8 @@ interface ReadingState {
   setFontFamily: (family: string) => void;
   setViewMode: (mode: "scroll" | "paginated") => void;
   setAiMode: (mode: ChatMode) => void;
+  triggerAskAI: (selectedText: string) => void;
+  clearAskAI: () => void;
   reset: () => void;
 }
 
@@ -44,6 +41,7 @@ const initialState = {
   fontFamily: "system",
   viewMode: "paginated" as const,
   aiMode: "companion" as ChatMode,
+  pendingAskAI: null as string | null,
 };
 
 export const useReadingStore = create<ReadingState>()((set) => ({
@@ -58,5 +56,7 @@ export const useReadingStore = create<ReadingState>()((set) => ({
   setFontFamily: (fontFamily) => set({ fontFamily }),
   setViewMode: (viewMode) => set({ viewMode }),
   setAiMode: (aiMode) => set({ aiMode }),
+  triggerAskAI: (text) => set({ pendingAskAI: text, aiMode: "companion" }),
+  clearAskAI: () => set({ pendingAskAI: null }),
   reset: () => set(initialState),
 }));

@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { sm2 } from "@/lib/spaced-repetition/sm2";
@@ -42,7 +43,7 @@ export const useReviewStore = create<ReviewState>()(
       cards: [],
 
       addCard: (input) => {
-        const id = crypto.randomUUID();
+        const id = uuid();
         const card: ReviewCard = {
           ...input,
           id,
@@ -60,7 +61,7 @@ export const useReviewStore = create<ReviewState>()(
       addCards: (inputs) => {
         const newCards: ReviewCard[] = inputs.map((input) => ({
           ...input,
-          id: crypto.randomUUID(),
+          id: uuid(),
           easeFactor: 2.5,
           interval: 0,
           repetitions: 0,

@@ -4,19 +4,19 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Settings, User, Brain, BookOpen, Key, Save, Eye, EyeOff, LogOut,
+  ArrowLeft, Settings, User, Brain, BookOpen, Key, Save, Eye, EyeOff, LogOut, Database, Download, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
 
-type TabId = "profile" | "ai" | "reading" | "account";
+type TabId = "profile" | "ai" | "reading" | "account" | "data";
 
 export default function SettingsPage() {
   const router = useRouter();
   const {
     isLoggedIn, currentUser, aiSettings, preferences,
-    login, logout, updateProfile, updateAISettings, updatePreferences,
+    login, logout, updateAISettings, updatePreferences,
   } = useUserStore();
 
   const [activeTab, setActiveTab] = useState<TabId>("ai");
@@ -25,6 +25,42 @@ export default function SettingsPage() {
   // Form states
   const [displayName, setDisplayName] = useState(currentUser?.displayName || "");
   const [email, setEmail] = useState(currentUser?.email || "");
+  const [password, setPassword] = useState("");
+  const [oldPw, setOldPw] = useState("");
+  const [newPw, setNewPw] = useState("");
+  const [pwMsg, setPwMsg] = useState("");
+  const [pwLoading, setPwLoading] = useState(false);
+  const [profileMsg, setProfileMsg] = useState("");
+  const [profileLoading, setProfileLoading] = useState(false);
+
+  async function handleSaveProfile() {
+    setProfileLoading(true); setProfileMsg("");
+    try {
+      const res = await fetch("/api/v2/user/settings", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: currentUser?.id, name: displayName }),
+      });
+      const data = await res.json();
+      if (data.ok) { setProfileMsg("已保存"); setTimeout(() => setProfileMsg(""), 2000); }
+      else setProfileMsg("保存失败");
+    } catch { setProfileMsg("网络错误"); }
+    setProfileLoading(false);
+  }
+
+  async function handleChangePassword() {
+    if (!oldPw || !newPw) { setPwMsg("请填写旧密码和新密码"); return; }
+    setPwLoading(true); setPwMsg("");
+    try {
+      const res = await fetch("/api/v2/auth", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "changePassword", userId: currentUser?.id, oldPassword: oldPw, newPassword: newPw }),
+      });
+      const data = await res.json();
+      if (data.ok) { setPwMsg("密码修改成功"); setOldPw(""); setNewPw(""); }
+      else { setPwMsg(data.error || "修改失败"); }
+    } catch { setPwMsg("网络错误"); }
+    setPwLoading(false);
+  }
   const [apiKey, setApiKey] = useState(aiSettings.apiKey);
   const [baseUrl, setBaseUrl] = useState(aiSettings.baseUrl);
   const [model, setModel] = useState(aiSettings.model);
@@ -39,12 +75,67 @@ export default function SettingsPage() {
     { id: "ai", label: "AI 设置", icon: Brain },
     { id: "reading", label: "阅读偏好", icon: BookOpen },
     { id: "account", label: "账号安全", icon: Key },
+    { id: "data", label: "数据管理", icon: Database },
   ];
 
-  function handleLogin() {
-    login({ displayName: displayName || email.split("@")[0] || "读者", email, avatarUrl: null });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+  // --- Data export/import ---
+  const [importMsg, setImportMsg] = useState("");
+
+  function handleExport() {
+    const keys = [
+      "aireadbook-library",
+      "aireadbook-annotations",
+      "aireadbook-knowledge",
+      "aireadbook-review",
+      "aireadbook-chat",
+      "aireadbook-user",
+      "aireadbook-ui",
+    ];
+    const data: Record<string, unknown> = {};
+    for (const key of keys) {
+      const raw = localStorage.getItem(key);
+      data[key] = raw ? JSON.parse(raw) : null;
+    }
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `aireadbook-backup-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  function handleImport() {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        let count = 0;
+        for (const [key, value] of Object.entries(data)) {
+          if (key.startsWith("aireadbook-") && value) {
+            localStorage.setItem(key, JSON.stringify(value));
+            count++;
+          }
+        }
+        setImportMsg(`已导入 ${count} 个数据项。请刷新页面使数据生效。`);
+      } catch {
+        setImportMsg("文件格式错误，请选择有效的备份文件。");
+      }
+    };
+    input.click();
+  }
+
+  async function handleLogin() {
+    const { apiLogin } = await import("@/lib/api-client-v2");
+    const user = await apiLogin(email, password || "");
+    if (user.error) return;
+    await login({ id: user.id, displayName: user.name || email.split("@")[0] || "读者", email: user.email, avatarUrl: null });
+    setSaved(true); setTimeout(() => setSaved(false), 2000);
   }
 
   function handleSaveAI() {
@@ -126,8 +217,13 @@ export default function SettingsPage() {
                     <div className="space-y-3">
                       <div>
                         <label className="mb-1 block text-sm">显示名称</label>
-                        <Input value={displayName} onChange={(e) => { setDisplayName(e.target.value); updateProfile({ displayName: e.target.value }); }} />
+                        <Input value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
                       </div>
+                      <Button onClick={handleSaveProfile} disabled={profileLoading} className="gap-2">
+                        <Save className="h-4 w-4" />
+                        {profileLoading ? "保存中..." : "保存名称"}
+                      </Button>
+                      {profileMsg && <p className={`text-sm ${profileMsg.includes("失败") ? "text-red-500" : "text-green-500"}`}>{profileMsg}</p>}
                     </div>
                   </div>
                 )}
@@ -263,14 +359,21 @@ export default function SettingsPage() {
                           <Input value={currentUser?.email || ""} disabled />
                         </div>
                         <div>
-                          <label className="mb-1 block text-sm font-medium">新密码</label>
-                          <Input type="password" placeholder="••••••••" />
+                          <label className="mb-1 block text-sm font-medium">旧密码</label>
+                          <Input type="password" value={oldPw} onChange={(e) => setOldPw(e.target.value)} placeholder="输入当前密码" />
                         </div>
                         <div>
-                          <label className="mb-1 block text-sm font-medium">确认新密码</label>
-                          <Input type="password" placeholder="••••••••" />
+                          <label className="mb-1 block text-sm font-medium">新密码</label>
+                          <Input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} placeholder="输入新密码" />
                         </div>
-                        <Button variant="outline">修改密码</Button>
+                        <Button variant="outline" onClick={handleChangePassword} disabled={pwLoading}>
+                          {pwLoading ? "修改中..." : "修改密码"}
+                        </Button>
+                        {pwMsg && (
+                          <p className={`text-sm ${pwMsg.includes("成功") ? "text-green-500" : "text-red-500"}`}>
+                            {pwMsg}
+                          </p>
+                        )}
                       </div>
                       <hr className="border-[var(--border)]" />
                       <div>
@@ -299,6 +402,40 @@ export default function SettingsPage() {
                       </Link>
                     </div>
                   )}
+                </div>
+              </div>
+            )}
+
+            {activeTab === "data" && (
+              <div className="space-y-4">
+                <h2 className="text-lg font-semibold">数据管理</h2>
+                <div className="rounded-lg border border-[var(--border)] p-6 space-y-6">
+                  <div>
+                    <h3 className="mb-2 text-sm font-medium">📡 数据存储</h3>
+                    <p className="mb-3 text-sm text-[var(--muted-foreground)]">
+                      数据已自动保存在服务器 MySQL 中。登录后所有设备自动同步。
+                    </p>
+                  </div>
+                  <hr className="border-[var(--border)]" />
+                  <div>
+                    <h3 className="mb-2 text-sm font-medium">💾 文件备份</h3>
+                    <p className="mb-3 text-sm text-[var(--muted-foreground)]">
+                      将当前浏览器缓存导出为 JSON 文件备份。
+                    </p>
+                    <div className="flex gap-2">
+                      <Button onClick={handleExport} variant="outline" className="gap-2">
+                        <Download className="h-4 w-4" />导出备份
+                      </Button>
+                      <Button onClick={handleImport} variant="outline" className="gap-2">
+                        <Upload className="h-4 w-4" />导入备份
+                      </Button>
+                    </div>
+                    {importMsg && (
+                      <p className={`mt-2 text-sm ${importMsg.includes("错误") ? "text-red-500" : "text-green-500"}`}>
+                        {importMsg}
+                      </p>
+                    )}
+                  </div>
                 </div>
               </div>
             )}

@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { NextRequest, NextResponse } from "next/server";
 import { parseEpub } from "@/lib/epub/parser";
 
@@ -25,13 +26,14 @@ export async function POST(request: NextRequest) {
     // For MVP: store book data in the response directly
     // In production, this would save to Supabase and trigger AI processing
     const book = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       title: epubData.metadata.title || file.name.replace(".epub", ""),
       author: epubData.metadata.creator || null,
+      coverUrl: null, // Cover can be added later via custom upload
       language: epubData.metadata.language || "zh",
       totalChapters: epubData.chapters.length,
       chapters: epubData.chapters.map((ch) => ({
-        id: crypto.randomUUID(),
+        id: uuid(),
         index: ch.index,
         title: ch.title,
         plainText: ch.plainText,

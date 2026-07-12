@@ -3,183 +3,89 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "mysql"
   url      = env("DATABASE_URL")
-  directUrl = env("DIRECT_URL")
 }
 
-enum ReadingStatus {
-  not_started
-  reading
-  finished
-  paused
-}
+model User {
+  id        Int       @id @default(autoincrement())
+  email     String    @unique @db.VarChar(255)
+  name      String    @db.VarChar(100)
+  password   String    @db.VarChar(255)  // hashed
+  aiSettings Json?     @map("ai_settings")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
 
-enum AIProcessingStatus {
-  pending
-  processing
-  partial
-  complete
-  error
-}
+  books       Book[]
+  annotations Annotation[]
+  reviewCards ReviewCard[]
 
-enum ChatMode {
-  companion
-  summary
-  extraction
-  teaching
-}
-
-enum CardType {
-  concept
-  argument
-  evidence
-  example
-  question
-}
-
-enum EntityType {
-  character
-  concept
-  event
-  location
-  organization
-}
-
-model UserProfile {
-  id          String   @id @db.Uuid
-  displayName String?  @map("display_name")
-  avatarUrl   String?  @map("avatar_url")
-  createdAt   DateTime @default(now()) @map("created_at")
-
-  books            Book[]
-  chatSessions     ChatSession[]
-  annotations      Annotation[]
-  reviewCards      ReviewCard[]
-  readingProgress  ReadingProgress[]
-  recommendations  BookRecommendation[]
-
-  @@map("user_profiles")
+  @@map("users")
 }
 
 model Book {
-  id               String             @id @default(uuid()) @db.Uuid
-  userId           String             @map("user_id") @db.Uuid
-  user             UserProfile        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  title            String
-  author           String?
-  coverUrl         String?            @map("cover_url")
-  language         String             @default("zh")
-  source           String             @default("upload")
-  sourceId         String?            @map("source_id")
-  filePath         String?            @map("file_path")
-  fileSize         BigInt?            @map("file_size")
-  epubMetadata     Json?              @map("epub_metadata")
-  totalChapters    Int                @default(0) @map("total_chapters")
-  ingestionStatus  AIProcessingStatus @default(pending) @map("ingestion_status")
-  createdAt        DateTime           @default(now()) @map("created_at")
-  updatedAt        DateTime           @updatedAt @map("updated_at")
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String    @db.VarChar(500)
+  author    String?   @db.VarChar(300)
+  coverUrl  String?   @db.Text @map("cover_url")
+  language  String    @default("zh") @db.VarChar(10)
+  chapters  Int       @default(0)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
-  chapters         Chapter[]
-  chunks           Chunk[]
-  chatSessions     ChatSession[]
-  annotations      Annotation[]
-  knowledgeCards   KnowledgeCard[]
-  mindMaps         MindMap[]
-  reviewCards      ReviewCard[]
-  kgEntities       KGEntity[]
-  kgRelations      KGRelation[]
-  readingProgress  ReadingProgress[]
-  recommendations  BookRecommendation[]
+  chaptersRel   Chapter[]
+  annotations   Annotation[]
+  chatSessions  ChatSession[]
+  reviewCards   ReviewCard[]
 
   @@map("books")
 }
 
 model Chapter {
-  id                String    @id @default(uuid()) @db.Uuid
-  bookId            String    @map("book_id") @db.Uuid
-  book              Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  index             Int
-  title             String?
-  rawText           String?   @map("raw_text")
-  plainText         String?   @map("plain_text")
-  wordCount         Int?      @map("word_count")
-  summaryShort      String?   @map("summary_short")
-  summaryMedium     String?   @map("summary_medium")
-  summaryDetailed   String?   @map("summary_detailed")
-  summaryGeneratedAt DateTime? @map("summary_generated_at")
+  id        Int       @id @default(autoincrement())
+  bookId    Int       @map("book_id")
+  book      Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  index     Int
+  title     String?   @db.VarChar(500)
+  content   String    @db.LongText
+  wordCount Int       @default(0) @map("word_count")
+  summary   String?   @db.Text
 
-  chunks            Chunk[]
-  knowledgeCards    KnowledgeCard[]
-  mindMaps          MindMap[]
-  annotations       Annotation[]
-  readingProgress   ReadingProgress[]
+  annotations Annotation[]
 
   @@unique([bookId, index])
   @@map("chapters")
 }
 
-model Chunk {
-  id          String   @id @default(uuid()) @db.Uuid
-  bookId      String   @map("book_id") @db.Uuid
-  book        Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapterId   String?  @map("chapter_id") @db.Uuid
-  chapter     Chapter? @relation(fields: [chapterId], references: [id], onDelete: SetNull)
-  chunkIndex  Int      @map("chunk_index")
-  content     String
-  embedding   Unsupported("vector(1024)")?
-  startOffset Int?     @map("start_offset")
-  endOffset   Int?     @map("end_offset")
-  metadata    Json?
+model Annotation {
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId       Int       @map("book_id")
+  book         Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterId    Int?      @map("chapter_id")
+  chapter      Chapter?  @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  selectedText String    @db.Text @map("selected_text")
+  note         String?   @db.Text
+  color        String    @default("yellow") @db.VarChar(20)
+  aiCategory   String?   @db.VarChar(100) @map("ai_category")
+  aiSummary    String?   @db.Text @map("ai_summary")
+  createdAt    DateTime  @default(now()) @map("created_at")
 
-  @@unique([bookId, chunkIndex])
-  @@map("chunks")
-}
-
-model KGEntity {
-  id          String     @id @default(uuid()) @db.Uuid
-  bookId      String     @map("book_id") @db.Uuid
-  book        Book       @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  name        String
-  entityType  EntityType @map("entity_type")
-  description String?
-  metadata    Json?
-
-  relationsFrom KGRelation[] @relation("source_entity")
-  relationsTo   KGRelation[] @relation("target_entity")
-
-  @@unique([bookId, name])
-  @@map("kg_entities")
-}
-
-model KGRelation {
-  id              String    @id @default(uuid()) @db.Uuid
-  bookId          String    @map("book_id") @db.Uuid
-  book            Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  sourceEntityId  String    @map("source_entity_id") @db.Uuid
-  sourceEntity    KGEntity  @relation("source_entity", fields: [sourceEntityId], references: [id], onDelete: Cascade)
-  targetEntityId  String    @map("target_entity_id") @db.Uuid
-  targetEntity    KGEntity  @relation("target_entity", fields: [targetEntityId], references: [id], onDelete: Cascade)
-  relationType    String    @map("relation_type")
-  description     String?
-  weight          Float     @default(1.0)
-  sourceChunks    String[]  @map("source_chunks") @db.Uuid
-
-  @@map("kg_relations")
+  @@map("annotations")
 }
 
 model ChatSession {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  user      UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookId    String   @map("book_id") @db.Uuid
-  book      Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapterId String?  @map("chapter_id") @db.Uuid
-  chapter   Chapter? @relation(fields: [chapterId], references: [id])
-  mode      ChatMode @default(companion)
-  title     String?
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id        Int       @id @default(autoincrement())
+  bookId    Int       @map("book_id")
+  book      Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterId Int?      @map("chapter_id")
+  title     String    @db.VarChar(500)
+  mode      String    @default("companion") @db.VarChar(20)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
 
   messages ChatMessage[]
 
@@ -187,80 +93,25 @@ model ChatSession {
 }
 
 model ChatMessage {
-  id              String     @id @default(uuid()) @db.Uuid
-  sessionId       String     @map("session_id") @db.Uuid
-  session         ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  role            String
-  content         String
-  contextChunks   String[]   @map("context_chunks") @db.Uuid
-  contextEntities String[]   @map("context_entities")
-  createdAt       DateTime   @default(now()) @map("created_at")
+  id        Int         @id @default(autoincrement())
+  sessionId Int         @map("session_id")
+  session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  role      String      @db.VarChar(20)
+  content   String      @db.Text
+  createdAt DateTime    @default(now()) @map("created_at")
 
   @@map("chat_messages")
 }
 
-model Annotation {
-  id            String   @id @default(uuid()) @db.Uuid
-  userId        String   @map("user_id") @db.Uuid
-  user          UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookId        String   @map("book_id") @db.Uuid
-  book          Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapterId     String?  @map("chapter_id") @db.Uuid
-  chapter       Chapter? @relation(fields: [chapterId], references: [id])
-  chunkId       String?  @map("chunk_id") @db.Uuid
-  cfi           String?
-  selectedText  String   @map("selected_text")
-  note          String?
-  color         String   @default("yellow")
-  aiStructured  Json?    @map("ai_structured")
-  createdAt     DateTime @default(now()) @map("created_at")
-
-  @@map("annotations")
-}
-
-model KnowledgeCard {
-  id           String   @id @default(uuid()) @db.Uuid
-  bookId       String   @map("book_id") @db.Uuid
-  book         Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapterId    String?  @map("chapter_id") @db.Uuid
-  chapter      Chapter? @relation(fields: [chapterId], references: [id])
-  cardType     CardType @map("card_type")
-  title        String
-  content      String
-  sourceChunks String[] @map("source_chunks") @db.Uuid
-  tags         String[]
-  difficulty   String?
-  createdAt    DateTime @default(now()) @map("created_at")
-
-  @@map("knowledge_cards")
-}
-
-model MindMap {
-  id            String   @id @default(uuid()) @db.Uuid
-  bookId        String   @map("book_id") @db.Uuid
-  book          Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapterId     String?  @map("chapter_id") @db.Uuid
-  chapter       Chapter? @relation(fields: [chapterId], references: [id])
-  title         String
-  data          Json
-  isAiGenerated Boolean  @default(true) @map("is_ai_generated")
-  createdAt     DateTime @default(now()) @map("created_at")
-  updatedAt     DateTime @updatedAt @map("updated_at")
-
-  @@map("mindmaps")
-}
-
 model ReviewCard {
-  id           String    @id @default(uuid()) @db.Uuid
-  userId       String    @map("user_id") @db.Uuid
-  user         UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookId       String    @map("book_id") @db.Uuid
+  id           Int       @id @default(autoincrement())
+  userId       Int       @map("user_id")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId       Int       @map("book_id")
   book         Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  sourceType   String    @map("source_type")
-  sourceId     String?   @map("source_id") @db.Uuid
-  front        String
-  back         String
-  tags         String[]
+  front        String    @db.Text
+  back         String    @db.Text
+  sourceType   String    @db.VarChar(20) @map("source_type")
   easeFactor   Float     @default(2.5) @map("ease_factor")
   interval     Int       @default(0)
   repetitions  Int       @default(0)
@@ -269,37 +120,4 @@ model ReviewCard {
   createdAt    DateTime  @default(now()) @map("created_at")
 
   @@map("review_cards")
-}
-
-model ReadingProgress {
-  id         String   @id @default(uuid()) @db.Uuid
-  userId     String   @map("user_id") @db.Uuid
-  user       UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
-  bookId     String   @map("book_id") @db.Uuid
-  book       Book     @relation(fields: [bookId], references: [id], onDelete: Cascade)
-  chapterId  String?  @map("chapter_id") @db.Uuid
-  chapter    Chapter? @relation(fields: [chapterId], references: [id])
-  cfi        String
-  percentage Float    @default(0)
-  updatedAt  DateTime @updatedAt @map("updated_at")
-
-  @@unique([userId, bookId])
-  @@map("reading_progress")
-}
-
-model BookRecommendation {
-  id                  String   @id @default(uuid()) @db.Uuid
-  userId              String   @map("user_id") @db.Uuid
-  user                UserProfile @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sourceBookId        String   @map("source_book_id") @db.Uuid
-  sourceBook          Book     @relation(fields: [sourceBookId], references: [id], onDelete: Cascade)
-  recommendedTitle    String   @map("recommended_title")
-  recommendedAuthor   String?  @map("recommended_author")
-  recommendedSourceId String?  @map("recommended_source_id")
-  reason              String?
-  relevanceScore      Float?   @map("relevance_score")
-  status              String   @default("suggested")
-  createdAt           DateTime @default(now()) @map("created_at")
-
-  @@map("book_recommendations")
 }

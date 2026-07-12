@@ -1,94 +1,52 @@
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import * as api from "@/lib/api-client-v2";
 
-export interface AISettings {
-  apiKey: string;
-  baseUrl: string;
-  model: string;
-  temperature: number;
-  maxTokens: number;
-}
-
-export interface UserPreferences {
-  fontSize: number;
-  lineHeight: number;
-  fontFamily: string;
-  theme: "light" | "dark" | "sepia";
-  language: "zh" | "en";
-}
-
-export interface UserProfile {
-  displayName: string;
-  email: string;
-  avatarUrl: string | null;
-}
+export interface AISettings { apiKey: string; baseUrl: string; model: string; temperature: number; maxTokens: number; }
+export interface UserPreferences { fontSize: number; lineHeight: number; fontFamily: string; theme: "light" | "dark" | "sepia"; language: "zh" | "en"; }
+export interface UserProfile { id: number; displayName: string; email: string; avatarUrl: string | null; }
 
 interface UserState {
-  // Auth
   isLoggedIn: boolean;
   currentUser: UserProfile | null;
-
-  // Settings
   aiSettings: AISettings;
   preferences: UserPreferences;
 
-  // Actions
-  login: (profile: UserProfile) => void;
+  login: (profile: UserProfile) => Promise<void>;
   logout: () => void;
-  updateProfile: (profile: Partial<UserProfile>) => void;
+  loadSettings: (userId: number) => Promise<void>;
   updateAISettings: (settings: Partial<AISettings>) => void;
   updatePreferences: (prefs: Partial<UserPreferences>) => void;
 }
 
-const defaultAISettings: AISettings = {
-  apiKey: "",
-  baseUrl: "https://api.deepseek.com",
-  model: "deepseek-v4-flash",
-  temperature: 0.7,
-  maxTokens: 2048,
-};
+const defaultAISettings: AISettings = { apiKey: "", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-flash", temperature: 0.7, maxTokens: 2048 };
+const defaultPreferences: UserPreferences = { fontSize: 16, lineHeight: 1.6, fontFamily: "system", theme: "light", language: "zh" };
 
-const defaultPreferences: UserPreferences = {
-  fontSize: 16,
-  lineHeight: 1.6,
-  fontFamily: "system",
-  theme: "light",
-  language: "zh",
-};
+export const useUserStore = create<UserState>()((set, get) => ({
+  isLoggedIn: false, currentUser: null,
+  aiSettings: { ...defaultAISettings }, preferences: { ...defaultPreferences },
 
-export const useUserStore = create<UserState>()(
-  persist(
-    (set) => ({
-      isLoggedIn: false,
-      currentUser: null,
-      aiSettings: { ...defaultAISettings },
-      preferences: { ...defaultPreferences },
+  login: async (profile) => {
+    set({ isLoggedIn: true, currentUser: profile });
+    await get().loadSettings(profile.id);
+  },
 
-      login: (profile) =>
-        set({ isLoggedIn: true, currentUser: profile }),
+  logout: () => set({ isLoggedIn: false, currentUser: null, aiSettings: { ...defaultAISettings } }),
 
-      logout: () =>
-        set({
-          isLoggedIn: false,
-          currentUser: null,
-          aiSettings: { ...defaultAISettings },
-        }),
+  loadSettings: async (userId) => {
+    api.setUserId(userId);
+    try {
+      const data = await api.apiGetUserSettings();
+      if (data.aiSettings && Object.keys(data.aiSettings).length > 0) {
+        set({ aiSettings: { ...defaultAISettings, ...data.aiSettings } });
+      }
+    } catch {}
+  },
 
-      updateProfile: (profile) =>
-        set((s) => ({
-          currentUser: s.currentUser ? { ...s.currentUser, ...profile } : null,
-        })),
+  updateAISettings: (settings) => {
+    const merged = { ...get().aiSettings, ...settings };
+    set({ aiSettings: merged });
+    if (get().isLoggedIn) api.apiSaveUserSettings(merged).catch(() => {});
+  },
 
-      updateAISettings: (settings) =>
-        set((s) => ({
-          aiSettings: { ...s.aiSettings, ...settings },
-        })),
-
-      updatePreferences: (prefs) =>
-        set((s) => ({
-          preferences: { ...s.preferences, ...prefs },
-        })),
-    }),
-    { name: "aireadbook-user" },
-  ),
-);
+  updatePreferences: (prefs) => set(s => ({ preferences: { ...s.preferences, ...prefs } })),
+}));

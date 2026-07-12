@@ -7,6 +7,7 @@ import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
+import { apiLogin } from "@/lib/api-client-v2";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,12 +23,22 @@ export default function LoginPage() {
     setError("");
 
     try {
-      // Store user profile and mark as logged in
-      useUserStore.getState().login({
-        displayName: email.split("@")[0],
-        email,
+      // Real MySQL auth
+      const user = await apiLogin(email, password);
+      if (user.error) { setError(user.error); setLoading(false); return; }
+
+      await useUserStore.getState().login({
+        id: user.id,
+        displayName: user.name || email.split("@")[0],
+        email: user.email,
         avatarUrl: null,
       });
+
+      // Load all data from MySQL
+      const { useLibraryStore } = await import("@/stores/library-store");
+      const { useAnnotationStore } = await import("@/stores/annotation-store");
+      await useLibraryStore.getState().load(user.id);
+      await useAnnotationStore.getState().load(user.id);
       router.push("/library");
     } catch {
       setError("登录失败，请检查邮箱和密码");

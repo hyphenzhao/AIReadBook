@@ -150,22 +150,36 @@ function extractManifest(opfXml: string): Record<string, string> {
 }
 
 function extractTitleFromHtml(html: string): string | null {
+  // Try <title> tag first (often includes book name, so check length)
   const titleMatch = html.match(/<title[^>]*>([^<]*)<\/title>/i);
-  if (titleMatch && titleMatch[1].trim()) return titleMatch[1].trim();
+  if (titleMatch && titleMatch[1].trim().length < 80) return titleMatch[1].trim();
 
-  const h1Match = html.match(/<h1[^>]*>([^<]*)<\/h1>/i);
-  if (h1Match) return h1Match[1].trim();
+  // Try all heading levels in order
+  for (const level of [1, 2, 3, 4]) {
+    const hMatch = html.match(new RegExp(`<h${level}[^>]*>([^<]*)</h${level}>`, "i"));
+    if (hMatch && hMatch[1].trim()) return hMatch[1].trim();
+  }
 
-  const h2Match = html.match(/<h2[^>]*>([^<]*)<\/h2>/i);
-  return h2Match ? h2Match[1].trim() : null;
+  // Try common chapter title patterns
+  const chapterMatch = html.match(/(?:第[一二三四五六七八九十百千\d]+[章节回卷篇部])\s*[^\n<]*/);
+  if (chapterMatch) return chapterMatch[0].trim();
+
+  return null;
 }
 
 function stripHtml(html: string): string {
-  // Remove scripts and styles
+  // Remove scripts and styles entirely
   let text = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "");
   text = text.replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "");
-  // Remove HTML tags
-  text = text.replace(/<[^>]+>/g, " ");
+
+  // Preserve paragraph structure: add newlines for block elements
+  text = text.replace(/<\/?(p|div|section|article|h[1-6]|li|blockquote|pre|table|tr)[^>]*>/gi, "\n");
+  text = text.replace(/<br\s*\/?>/gi, "\n");
+  text = text.replace(/<\/?(ul|ol|dl|hr|figure)[^>]*>/gi, "\n");
+
+  // Remove remaining HTML tags
+  text = text.replace(/<[^>]+>/g, "");
+
   // Decode HTML entities
   text = text.replace(/&amp;/g, "&");
   text = text.replace(/&lt;/g, "<");
@@ -173,8 +187,17 @@ function stripHtml(html: string): string {
   text = text.replace(/&quot;/g, '"');
   text = text.replace(/&#39;/g, "'");
   text = text.replace(/&nbsp;/g, " ");
-  // Collapse whitespace
-  text = text.replace(/\s+/g, " ");
+  text = text.replace(/&ldquo;/g, "“");
+  text = text.replace(/&rdquo;/g, "”");
+  text = text.replace(/&mdash;/g, "—");
+  text = text.replace(/&hellip;/g, "…");
+
+  // Collapse multiple newlines (max 2)
+  text = text.replace(/\n{3,}/g, "\n\n");
+  // Trim each line but preserve paragraph breaks
+  text = text.split("\n").map((l) => l.trim()).join("\n");
+  // Remove leading/trailing whitespace
   text = text.trim();
+
   return text;
 }

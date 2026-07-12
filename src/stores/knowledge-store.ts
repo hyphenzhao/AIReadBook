@@ -1,3 +1,4 @@
+import { uuid } from "@/lib/utils";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
@@ -61,7 +62,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
       mindMaps: [],
 
       addCard: (input) => {
-        const id = crypto.randomUUID();
+        const id = uuid();
         const card: KnowledgeCard = { ...input, id, createdAt: new Date().toISOString() };
         set((s) => ({ cards: [card, ...s.cards] }));
         return id;
@@ -70,7 +71,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
       addCards: (inputs) => {
         const newCards: KnowledgeCard[] = inputs.map((input) => ({
           ...input,
-          id: crypto.randomUUID(),
+          id: uuid(),
           createdAt: new Date().toISOString(),
         }));
         set((s) => ({ cards: [...newCards, ...s.cards] }));
@@ -87,7 +88,7 @@ export const useKnowledgeStore = create<KnowledgeState>()(
         get().cards.filter((c) => c.bookId === bookId && c.cardType === type),
 
       addMindMap: (input) => {
-        const id = crypto.randomUUID();
+        const id = uuid();
         const now = new Date().toISOString();
         const mm: MindMap = { ...input, id, createdAt: now, updatedAt: now };
         set((s) => ({ mindMaps: [mm, ...s.mindMaps] }));

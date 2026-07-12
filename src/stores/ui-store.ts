@@ -2,21 +2,24 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 interface UIState {
-  // Theme
   theme: "light" | "dark" | "sepia";
   setTheme: (theme: "light" | "dark" | "sepia") => void;
 
-  // Sidebar / Panel visibility
   leftPanelOpen: boolean;
   rightPanelOpen: boolean;
   toggleLeftPanel: () => void;
   toggleRightPanel: () => void;
 
-  // Panel widths (as fractions, 0-1)
   leftPanelWidth: number;
   rightPanelWidth: number;
   setLeftPanelWidth: (w: number) => void;
   setRightPanelWidth: (w: number) => void;
+
+  // AI Panel position & size (persisted)
+  aiPanelPosition: "right" | "bottom";
+  aiPanelSize: number; // percentage for right (0.2-0.5), pixels for bottom (200-600)
+  toggleAiPanelPosition: () => void;
+  setAiPanelSize: (size: number) => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -32,8 +35,18 @@ export const useUIStore = create<UIState>()(
 
       leftPanelWidth: 0.2,
       rightPanelWidth: 0.3,
-      setLeftPanelWidth: (w) => set({ leftPanelWidth: w }),
-      setRightPanelWidth: (w) => set({ rightPanelWidth: w }),
+      setLeftPanelWidth: (w) => set({ leftPanelWidth: Math.max(0.15, Math.min(0.4, w)) }),
+      setRightPanelWidth: (w) => set({ rightPanelWidth: Math.max(0.2, Math.min(0.5, w)) }),
+
+      aiPanelPosition: "right",
+      aiPanelSize: 0.3,
+      toggleAiPanelPosition: () =>
+        set((s) => ({
+          aiPanelPosition: s.aiPanelPosition === "right" ? "bottom" : "right",
+          // Swap size when toggling
+          aiPanelSize: s.aiPanelPosition === "right" ? 350 : 0.3,
+        })),
+      setAiPanelSize: (size) => set({ aiPanelSize: size }),
     }),
     { name: "aireadbook-ui" },
   ),
