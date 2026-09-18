@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUserId, sessionError } from "@/lib/auth-session";
+import { enqueueBookIndexing } from "@/lib/knowledge/index-book";
 
 export async function GET() {
   try {
@@ -36,6 +37,8 @@ export async function POST(req: NextRequest) {
       data: chapters.map((ch: any) => ({ bookId: book.id, index: ch.index, title: ch.title, content: ch.plainText || "", wordCount: ch.wordCount || 0 })),
     });
   }
+  // Chunk + embed in the background; the book is readable straight away.
+  await enqueueBookIndexing(book.id, userId).catch((error) => console.error("Could not queue indexing", error));
   const persistedChapters = await prisma.chapter.findMany({
     where: { bookId: book.id },
     orderBy: { index: "asc" },

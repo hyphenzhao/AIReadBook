@@ -54,6 +54,17 @@ if [ -f prisma/post-push.sql ]; then
   MYSQL_PWD="$db_pass" mysql -h "$db_host" -u "$db_user" "$db_name" <prisma/post-push.sql
 fi
 
+# Prisma cannot declare a FULLTEXT parser. Chinese text needs ngram, or MATCH()
+# finds nothing, so rebuild any of our fulltext indexes that lack it.
+ensure_ngram() { # table, index, columns
+  if ! MYSQL_PWD="$db_pass" mysql -h "$db_host" -u "$db_user" "$db_name" -N -e "SHOW CREATE TABLE $1" | grep -q "KEY \`$2\`.*ngram"; then
+    echo "rebuilding $1.$2 with the ngram parser"
+    MYSQL_PWD="$db_pass" mysql -h "$db_host" -u "$db_user" "$db_name" -e       "ALTER TABLE $1 DROP INDEX $2, ADD FULLTEXT INDEX $2 ($3) WITH PARSER ngram"
+  fi
+}
+ensure_ngram chapters ft_chapter_content "title, content"
+ensure_ngram chunks ft_chunk_text "text"
+
 log "Type-check and unit tests"
 npx tsc --noEmit -p tsconfig.typecheck.json
 npx vitest run
@@ -65,7 +76,9 @@ rm -rf .next-build .next/types
 NEXT_DIST_DIR=.next-build npx next build
 
 log "Smoke-testing the new build on :$SMOKE_PORT"
-NEXT_DIST_DIR=.next-build npx next start -H 127.0.0.1 -p "$SMOKE_PORT" >/tmp/aireadbook-smoke.log 2>&1 &
+# Started with node directly (not npx) so that $! is the server itself and the
+# kill below cannot leave it running behind a dead wrapper.
+JOBS_DISABLED=1 NEXT_DIST_DIR=.next-build node node_modules/next/dist/bin/next start -H 127.0.0.1 -p "$SMOKE_PORT" >/tmp/aireadbook-smoke.log 2>&1 &
 smoke_pid=$!
 trap 'kill $smoke_pid 2>/dev/null || true' EXIT
 if ! wait_healthy "$SMOKE_PORT" 40; then

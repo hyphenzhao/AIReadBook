@@ -19,9 +19,14 @@ model User {
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
-  books       Book[]
-  annotations Annotation[]
-  reviewCards ReviewCard[]
+  books           Book[]
+  annotations     Annotation[]
+  reviewCards     ReviewCard[]
+  chunks          Chunk[]
+  knowledgeCards  KnowledgeCard[]
+  graphNodes      GraphNode[]
+  graphEdges      GraphEdge[]
+  readingProgress ReadingProgress[]
 
   @@map("users")
 }
@@ -52,10 +57,14 @@ model Book {
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
-  chaptersRel   Chapter[]
-  annotations   Annotation[]
-  chatSessions  ChatSession[]
-  reviewCards   ReviewCard[]
+  chaptersRel     Chapter[]
+  annotations     Annotation[]
+  chatSessions    ChatSession[]
+  reviewCards     ReviewCard[]
+  chunks          Chunk[]
+  knowledgeCards  KnowledgeCard[]
+  graphMentions   GraphMention[]
+  readingProgress ReadingProgress[]
 
   @@map("books")
 }
@@ -68,9 +77,14 @@ model Chapter {
   title     String?   @db.VarChar(500)
   content   String    @db.LongText
   wordCount Int       @default(0) @map("word_count")
-  summary   String?   @db.Text
+  summary      String?   @db.Text
+  summaryModel String?   @db.VarChar(200) @map("summary_model")
+  summaryAt    DateTime? @map("summary_at")
 
-  annotations Annotation[]
+  annotations    Annotation[]
+  chunks         Chunk[]
+  knowledgeCards KnowledgeCard[]
+  graphMentions  GraphMention[]
 
   @@unique([bookId, index])
   @@fulltext([title, content], map: "ft_chapter_content")
@@ -116,6 +130,8 @@ model ChatMessage {
   session   ChatSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   role      String      @db.VarChar(20)
   content   String      @db.Text
+  /// Sources the answer was grounded on (retrieval tier, chunks, web results).
+  annotations Json?
   createdAt DateTime    @default(now()) @map("created_at")
 
   @@map("chat_messages")
@@ -130,6 +146,7 @@ model ReviewCard {
   front        String    @db.Text
   back         String    @db.Text
   sourceType   String    @db.VarChar(20) @map("source_type")
+  cardId       Int?      @map("card_id")
   easeFactor   Float     @default(2.5) @map("ease_factor")
   interval     Int       @default(0)
   repetitions  Int       @default(0)
@@ -138,4 +155,221 @@ model ReviewCard {
   createdAt    DateTime  @default(now()) @map("created_at")
 
   @@map("review_cards")
+}
+
+// ---------------------------------------------------------------------------
+// Knowledge foundation shared by books and (later) papers.
+// Cross-cutting tables carry real nullable foreign keys per source rather than
+// a bare (type, id) pair, so cascading deletes and typed relations keep working.
+// ---------------------------------------------------------------------------
+
+enum SourceType {
+  BOOK
+  PAPER
+}
+
+/// Books and papers keep separate graphs.
+enum GraphScope {
+  BOOK
+  PAPER
+}
+
+/// A retrieval unit: ~900 characters of a chapter (or paper section).
+model Chunk {
+  id         Int        @id @default(autoincrement())
+  userId     Int        @map("user_id")
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceType SourceType @map("source_type")
+  bookId     Int?       @map("book_id")
+  book       Book?      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterId  Int?       @map("chapter_id")
+  chapter    Chapter?   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  /// Position within the chapter (or paper).
+  ordinal    Int
+  text       String     @db.MediumText
+  section    String?    @db.VarChar(300)
+  pageStart  Int?       @map("page_start")
+  pageEnd    Int?       @map("page_end")
+  /// Character offsets into the chapter text, for jumping back to the passage.
+  charStart  Int        @map("char_start")
+  charEnd    Int        @map("char_end")
+
+  embedding      Embedding?
+  knowledgeCards KnowledgeCard[]
+  graphMentions  GraphMention[]
+
+  @@index([bookId, chapterId, ordinal])
+  @@index([userId, sourceType])
+  @@fulltext([text], map: "ft_chunk_text")
+  @@map("chunks")
+}
+
+/// Kept apart from Chunk so text queries never drag 4 KB vectors along.
+model Embedding {
+  chunkId Int    @id @map("chunk_id")
+  chunk   Chunk  @relation(fields: [chunkId], references: [id], onDelete: Cascade)
+  model   String @db.VarChar(100)
+  dim     Int
+  /// Float32 little-endian, L2-normalised at write time (cosine == dot product).
+  vec     Bytes  @db.Blob
+
+  @@map("embeddings")
+}
+
+model KnowledgeCard {
+  id         Int        @id @default(autoincrement())
+  userId     Int        @map("user_id")
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sourceType SourceType @map("source_type")
+  bookId     Int?       @map("book_id")
+  book       Book?      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterId  Int?       @map("chapter_id")
+  chapter    Chapter?   @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  chunkId    Int?       @map("chunk_id")
+  chunk      Chunk?     @relation(fields: [chunkId], references: [id], onDelete: SetNull)
+  cardType   String     @db.VarChar(20) @map("card_type")
+  title      String     @db.VarChar(300)
+  content    String     @db.Text
+  /// Verbatim source sentence, verified against the text before saving.
+  quote      String?    @db.Text
+  tags       Json
+  difficulty String     @default("intermediate") @db.VarChar(20)
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([userId, bookId])
+  @@map("knowledge_cards")
+}
+
+model GraphNode {
+  id          Int        @id @default(autoincrement())
+  userId      Int        @map("user_id")
+  user        User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope       GraphScope
+  type        String     @db.VarChar(30)
+  name        String     @db.VarChar(200)
+  /// NFKC + lowercase + punctuation stripped; the merge key.
+  normName    String     @db.VarChar(200) @map("norm_name")
+  description String?    @db.Text
+  /// Embedding of "name: description", used to merge near-duplicates.
+  vec         Bytes?     @db.Blob
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
+
+  aliases  GraphAlias[]
+  outEdges GraphEdge[]    @relation("EdgeSrc")
+  inEdges  GraphEdge[]    @relation("EdgeDst")
+  mentions GraphMention[]
+
+  @@unique([userId, scope, type, normName])
+  @@map("graph_nodes")
+}
+
+model GraphAlias {
+  id        Int       @id @default(autoincrement())
+  nodeId    Int       @map("node_id")
+  node      GraphNode @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  normAlias String    @db.VarChar(200) @map("norm_alias")
+
+  @@unique([nodeId, normAlias])
+  @@index([normAlias])
+  @@map("graph_aliases")
+}
+
+model GraphEdge {
+  id       Int        @id @default(autoincrement())
+  userId   Int        @map("user_id")
+  user     User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scope    GraphScope
+  srcId    Int        @map("src_id")
+  src      GraphNode  @relation("EdgeSrc", fields: [srcId], references: [id], onDelete: Cascade)
+  dstId    Int        @map("dst_id")
+  dst      GraphNode  @relation("EdgeDst", fields: [dstId], references: [id], onDelete: Cascade)
+  relation String     @db.VarChar(60)
+  weight   Float      @default(1)
+
+  mentions GraphMention[]
+
+  @@unique([srcId, dstId, relation])
+  @@index([userId, scope])
+  @@map("graph_edges")
+}
+
+/// Provenance: where in the text a node or edge was found.
+model GraphMention {
+  id         Int        @id @default(autoincrement())
+  nodeId     Int?       @map("node_id")
+  node       GraphNode? @relation(fields: [nodeId], references: [id], onDelete: Cascade)
+  edgeId     Int?       @map("edge_id")
+  edge       GraphEdge? @relation(fields: [edgeId], references: [id], onDelete: Cascade)
+  chunkId    Int?       @map("chunk_id")
+  chunk      Chunk?     @relation(fields: [chunkId], references: [id], onDelete: SetNull)
+  bookId     Int?       @map("book_id")
+  book       Book?      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  chapterId  Int?       @map("chapter_id")
+  chapter    Chapter?   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  quote      String?    @db.Text
+  confidence Float      @default(1)
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([nodeId])
+  @@index([edgeId])
+  @@index([chapterId])
+  @@map("graph_mentions")
+}
+
+model ReadingProgress {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bookId    Int?     @map("book_id")
+  book      Book?    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  /// Books: { chapterIndex, ratio }. Papers: { page, scale, offsetRatio }.
+  locator   Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([userId, bookId])
+  @@map("reading_progress")
+}
+
+enum JobStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+}
+
+/// Background work run by the in-process worker (src/lib/jobs).
+model Job {
+  id          Int       @id @default(autoincrement())
+  userId      Int?      @map("user_id")
+  type        String    @db.VarChar(50)
+  payload     Json
+  /// Set to skip enqueueing a second identical job while one is pending.
+  dedupeKey   String?   @db.VarChar(200) @map("dedupe_key")
+  status      JobStatus @default(QUEUED)
+  stage       String?   @db.VarChar(100)
+  progress    Int       @default(0)
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3) @map("max_attempts")
+  runAfter    DateTime  @default(now()) @map("run_after")
+  lockedBy    String?   @db.VarChar(100) @map("locked_by")
+  heartbeatAt DateTime? @map("heartbeat_at")
+  error       String?   @db.Text
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([status, runAfter])
+  @@index([dedupeKey, status])
+  @@map("jobs")
+}
+
+model WebSearchCache {
+  id        Int      @id @default(autoincrement())
+  provider  String   @db.VarChar(30)
+  queryHash String   @db.VarChar(64) @map("query_hash")
+  results   Json
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([provider, queryHash])
+  @@map("web_search_cache")
 }
