@@ -135,7 +135,7 @@ function extractRelevantSnippet(content: string, keywords: string[], maxLen: num
   return snippet;
 }
 
-function extractSearchTerms(query: string): string[] {
+export function extractSearchTerms(query: string): string[] {
   const cleaned = query
     .toLowerCase()
     .replace(

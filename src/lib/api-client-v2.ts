@@ -112,8 +112,8 @@ export async function apiCreateChatSession(data: any) {
 export async function apiDeleteChatSession(id: string) {
   return del(`/api/v2/chat/${id}`);
 }
-export async function apiAddChatMessage(sessionId: string, role: string, content: string) {
-  return post(`/api/v2/chat/${sessionId}/messages`, { role, content });
+export async function apiAddChatMessage(sessionId: string, role: string, content: string, annotations?: unknown[]) {
+  return post(`/api/v2/chat/${sessionId}/messages`, { role, content, annotations });
 }
 
 // --- User Settings ---
@@ -185,9 +185,36 @@ export async function apiAdminUpdateUser(id: number, data: AdminUserPatch): Prom
 export async function apiAdminDeleteUser(id: number) {
   await del(`/api/v2/admin/users/${id}`);
 }
-export async function apiAdminGetSettings(): Promise<{ settings: AppSettings }> {
+export interface WebSearchConfig { provider: "bocha" | "tavily"; hasKey: boolean; keyHint: string; dailyLimit: number }
+export interface AdminSettings { settings: AppSettings; webSearch: WebSearchConfig }
+
+export async function apiAdminGetSettings(): Promise<AdminSettings> {
   return get("/api/v2/admin/settings");
 }
-export async function apiAdminSaveSettings(settings: Partial<AppSettings>): Promise<{ settings: AppSettings }> {
+/** `webSearch.apiKey`: omit to keep the stored key, "" to clear it. */
+export async function apiAdminSaveSettings(
+  settings: Partial<AppSettings> & { webSearch?: { provider?: string; apiKey?: string; dailyLimit?: number } },
+): Promise<AdminSettings> {
   return patch("/api/v2/admin/settings", settings);
+}
+export async function apiAdminTestWebSearch(): Promise<{ ok: true; count: number; sample: string | null }> {
+  return post("/api/v2/admin/settings", {});
+}
+
+// --- Chapter summary ---
+export interface SourceRef {
+  id: string;
+  kind: "passage" | "web";
+  chapterId?: number | null;
+  chapterIndex?: number;
+  chapterTitle?: string;
+  charStart?: number;
+  charEnd?: number;
+  preview: string;
+  title?: string;
+  url?: string;
+  site?: string;
+}
+export async function apiGetChapterSummary(chapterId: string): Promise<{ summary: string | null; model: string | null; generatedAt: string | null; sources: SourceRef[] }> {
+  return get(`/api/summary?chapterId=${encodeURIComponent(chapterId)}`);
 }

@@ -5,7 +5,8 @@
 // --- Book & Reading ---
 export type ReadingStatus = "not_started" | "reading" | "finished" | "paused";
 export type AIProcessingStatus = "pending" | "processing" | "partial" | "complete" | "error";
-export type ChatMode = "companion" | "summary" | "extraction" | "teaching";
+/** 伴读 (open conversation) and 摘要 (summary first, then questions about this chapter). */
+export type ChatMode = "companion" | "summary";
 
 export interface Book {
   id: string;

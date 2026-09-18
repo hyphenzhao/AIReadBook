@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useUserStore } from "@/stores/user-store";
+import { WebSearchSettings } from "@/components/settings/WebSearchSettings";
 import {
   apiAdminCreateUser, apiAdminDeleteUser, apiAdminGetSettings, apiAdminListUsers,
   apiAdminSaveSettings, apiAdminUpdateUser, errorMessage,
@@ -131,6 +132,9 @@ export function UserManagement() {
           );
         })}
       </ul>
+
+      <h2 className="pt-4 text-lg font-semibold">系统设置</h2>
+      <WebSearchSettings />
 
       <Dialog open={!!editor} onOpenChange={(open) => !open && setEditor(null)}>
         {editor && (

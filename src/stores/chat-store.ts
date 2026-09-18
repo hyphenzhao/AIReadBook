@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import * as api from "@/lib/api-client-v2";
 
-export interface ChatMessage { id: string; role: string; content: string; createdAt: string; }
+export interface ChatMessage { id: string; role: string; content: string; createdAt: string; annotations?: unknown[]; }
 export interface ChatSession {
   id: string; bookId: string; chapterId: string | null; chapterTitle: string | null;
   mode: string; title: string; messages: ChatMessage[];
@@ -65,7 +65,7 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     // Sync last message to MySQL
     const lastMsg = messages[messages.length - 1];
     if (lastMsg && lastMsg.id !== "welcome") {
-      api.apiAddChatMessage(sessionId, lastMsg.role, lastMsg.content).catch(() => {});
+      api.apiAddChatMessage(sessionId, lastMsg.role, lastMsg.content, lastMsg.annotations).catch(() => {});
     }
   },
 

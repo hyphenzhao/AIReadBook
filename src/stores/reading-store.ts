@@ -1,5 +1,9 @@
 import { create } from "zustand";
 import type { Book, Chapter, ChatMode } from "@/types";
+import { useUIStore } from "@/stores/ui-store";
+
+/** A passage an AI citation points at; the reader scrolls to it and flashes it. */
+export interface PassageJump { chapterId: string; charStart: number; charEnd: number; nonce: number }
 
 interface ReadingState {
   currentBook: Book | null;
@@ -13,8 +17,10 @@ interface ReadingState {
   viewMode: "scroll" | "paginated";
   aiMode: ChatMode;
 
-  // "Ask AI" event bus — replaces broken CustomEvent
+  // Text the reader selected and wants to ask about. The AI panel picks it up
+  // as a quoted attachment on the next question.
   pendingAskAI: string | null;
+  passageJump: PassageJump | null;
 
   setBook: (book: Book) => void;
   setChapters: (chapters: Chapter[]) => void;
@@ -27,6 +33,8 @@ interface ReadingState {
   setAiMode: (mode: ChatMode) => void;
   triggerAskAI: (selectedText: string) => void;
   clearAskAI: () => void;
+  jumpToPassage: (jump: Omit<PassageJump, "nonce">) => void;
+  clearPassageJump: () => void;
   reset: () => void;
 }
 
@@ -42,6 +50,7 @@ const initialState = {
   viewMode: "paginated" as const,
   aiMode: "companion" as ChatMode,
   pendingAskAI: null as string | null,
+  passageJump: null as PassageJump | null,
 };
 
 export const useReadingStore = create<ReadingState>()((set) => ({
@@ -56,7 +65,13 @@ export const useReadingStore = create<ReadingState>()((set) => ({
   setFontFamily: (fontFamily) => set({ fontFamily }),
   setViewMode: (viewMode) => set({ viewMode }),
   setAiMode: (aiMode) => set({ aiMode }),
-  triggerAskAI: (text) => set({ pendingAskAI: text, aiMode: "companion" }),
+  triggerAskAI: (text) => {
+    // The panel only mounts while open, so open it or nothing would happen.
+    useUIStore.setState({ rightPanelOpen: true });
+    set({ pendingAskAI: text, aiMode: "companion" });
+  },
   clearAskAI: () => set({ pendingAskAI: null }),
+  jumpToPassage: (jump) => set({ passageJump: { ...jump, nonce: Date.now() } }),
+  clearPassageJump: () => set({ passageJump: null }),
   reset: () => set(initialState),
 }));

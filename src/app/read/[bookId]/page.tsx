@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ReadingLayout } from "@/components/reader/ReadingLayout";
 import { ReadingHeader } from "@/components/reader/ReadingHeader";
@@ -14,6 +14,7 @@ import { useLibraryStore } from "@/stores/library-store";
 import { useAnnotationStore } from "@/stores/annotation-store";
 import { useUserStore } from "@/stores/user-store";
 import { useChatStore } from "@/stores/chat-store";
+import { useUIStore } from "@/stores/ui-store";
 import type { Chapter } from "@/types";
 import { BookOpen } from "lucide-react";
 
@@ -24,7 +25,9 @@ export default function ReadPage() {
   const getBook = useLibraryStore((s) => s.getBook);
   const libraryReady = useLibraryStore((s) => s.ready);
   const preferences = useUserStore((s) => s.preferences);
-  const { setBook, setChapters, setChapter, currentChapter, chapters, currentBook } = useReadingStore();
+  const {
+    setBook, setChapters, setChapter, currentChapter, chapters, currentBook, passageJump, clearPassageJump,
+  } = useReadingStore();
   const { getBookAnnotations } = useAnnotationStore();
   const [content, setContent] = useState("");
   const bookAnnotations = currentBook ? getBookAnnotations(currentBook.id) : [];
@@ -110,6 +113,42 @@ export default function ReadPage() {
     setContent(currentChapter?.plainText ?? "");
   }, [currentChapter]);
 
+  // Paragraphs with their character offsets in the chapter, so a cited
+  // passage (a character range) can be mapped onto what is rendered.
+  const paragraphs = useMemo(() => {
+    let offset = 0;
+    return content.split("\n\n").map((text) => {
+      const start = offset;
+      offset += text.length + 2;
+      return { text, start, end: start + text.length };
+    });
+  }, [content]);
+
+  // An AI citation was clicked: open its chapter, scroll to the passage and
+  // flash it. Re-runs as the chapter and then its content fall into place.
+  const [flash, setFlash] = useState<{ start: number; end: number } | null>(null);
+  useEffect(() => {
+    if (!passageJump) return;
+    const target = chapters.find((chapter) => chapter.id === passageJump.chapterId);
+    if (!target) { clearPassageJump(); return; }
+    if (currentChapter?.id !== target.id) { setChapter(target); return; }
+    if (content !== (target.plainText ?? "")) return;
+
+    setFlash({ start: passageJump.charStart, end: passageJump.charEnd });
+    clearPassageJump();
+    // On a phone the AI drawer covers the text it just pointed at.
+    if (window.matchMedia("(max-width: 767px)").matches) useUIStore.setState({ rightPanelOpen: false });
+    requestAnimationFrame(() => {
+      document.querySelector('[data-cited="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [passageJump, chapters, currentChapter, content, setChapter, clearPassageJump]);
+
+  useEffect(() => {
+    if (!flash) return;
+    const timer = setTimeout(() => setFlash(null), 3500);
+    return () => clearTimeout(timer);
+  }, [flash]);
+
   if (!libraryReady) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-sm text-[var(--muted-foreground)]">
@@ -170,13 +209,19 @@ export default function ReadPage() {
                   )}
                   {content ? (
                     <div className="space-y-4">
-                      {content.split("\n\n").map((para, i) =>
-                        para.trim() ? (
-                          <p key={i} className="leading-relaxed">
-                            <HighlightedText text={para} annotations={bookAnnotations} />
+                      {paragraphs.map((para, i) => {
+                        if (!para.text.trim()) return null;
+                        const cited = !!flash && para.start < flash.end && para.end > flash.start;
+                        return (
+                          <p
+                            key={i}
+                            data-cited={cited || undefined}
+                            className={`-mx-2 rounded px-2 leading-relaxed transition-colors duration-700 ${cited ? "bg-[var(--primary)]/15" : ""}`}
+                          >
+                            <HighlightedText text={para.text} annotations={bookAnnotations} />
                           </p>
-                        ) : null,
-                      )}
+                        );
+                      })}
                     </div>
                   ) : (
                     <div className="py-24 text-center text-[var(--muted-foreground)]">

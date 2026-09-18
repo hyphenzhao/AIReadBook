@@ -14,7 +14,7 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(sessions.map(s => ({
     id: String(s.id), bookId: String(s.bookId), chapterId: s.chapterId ? String(s.chapterId) : null,
     chapterTitle: null, title: s.title, mode: s.mode,
-    messages: s.messages.map(m => ({ id: String(m.id), role: m.role, content: m.content, createdAt: m.createdAt.toISOString() })),
+    messages: s.messages.map(m => ({ id: String(m.id), role: m.role, content: m.content, annotations: m.annotations ?? undefined, createdAt: m.createdAt.toISOString() })),
     createdAt: s.createdAt.toISOString(), updatedAt: s.updatedAt.toISOString(),
   })));
   } catch (error) {
