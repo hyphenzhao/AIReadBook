@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
-import { apiLogin } from "@/lib/api-client-v2";
+import { apiLogin, errorMessage } from "@/lib/api-client-v2";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,31 +22,35 @@ export default function LoginPage() {
     setLoading(true);
     setError("");
 
+    let user;
     try {
-      // Real MySQL auth
-      const user = await apiLogin(email, password);
-      if (user.error) { setError(user.error); setLoading(false); return; }
-
-      await useUserStore.getState().login({
-        id: user.id,
-        displayName: user.name || email.split("@")[0],
-        email: user.email,
-        avatarUrl: null,
-      });
-
-      // Load all data from MySQL
-      const { useLibraryStore } = await import("@/stores/library-store");
-      const { useAnnotationStore } = await import("@/stores/annotation-store");
-      await useLibraryStore.getState().load(user.id);
-      await useAnnotationStore.getState().load(user.id);
-      const next = new URLSearchParams(window.location.search).get("next");
-      router.push(next?.startsWith("/") && !next.startsWith("//") ? next : "/library");
-    } catch {
-      setError("登录失败，请检查邮箱和密码");
-    } finally {
+      user = await apiLogin(email, password);
+    } catch (err) {
+      // The server says which it is: wrong credentials (401) or an outage.
+      setError(errorMessage(err, "登录失败，请稍后重试"));
       setLoading(false);
+      return;
     }
+
+    // The session cookie is set at this point, so nothing below may block
+    // the redirect. Books and annotations load from Providers once the
+    // store has a user.
+    void useUserStore.getState().login({
+      id: user.id,
+      displayName: user.name || email.split("@")[0],
+      email: user.email,
+      avatarUrl: null,
+    });
+    const next = new URLSearchParams(window.location.search).get("next");
+    router.push(next?.startsWith("/") && !next.startsWith("//") ? next : "/library");
   }
+
+  const [notice, setNotice] = useState("");
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("reason") === "expired") {
+      setNotice("登录已过期，请重新登录");
+    }
+  }, []);
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[var(--background)] px-4">
@@ -56,6 +60,10 @@ export default function LoginPage() {
           <h1 className="text-2xl font-bold">登录 AIReadBook</h1>
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">AI 深度阅读助手</p>
         </div>
+
+        {notice && !error && (
+          <p className="mb-4 rounded-md border border-[var(--border)] bg-[var(--accent)] px-3 py-2 text-sm">{notice}</p>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>

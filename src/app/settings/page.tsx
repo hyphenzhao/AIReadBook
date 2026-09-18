@@ -4,23 +4,24 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Settings, User, Brain, BookOpen, Key, Save, Eye, EyeOff, LogOut, Database, Download, Upload,
+  ArrowLeft, Settings, User, Brain, BookOpen, Key, Save, LogOut, Database, Download, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
+import { AISettingsForm } from "@/components/settings/AISettingsForm";
+import { apiChangePassword, apiLogin, apiSaveUserName, errorMessage } from "@/lib/api-client-v2";
 
 type TabId = "profile" | "ai" | "reading" | "account" | "data";
 
 export default function SettingsPage() {
   const router = useRouter();
   const {
-    isLoggedIn, currentUser, aiSettings, preferences,
-    login, logout, updateAISettings, updatePreferences,
+    isLoggedIn, currentUser, preferences,
+    login, setProfile, logout, updatePreferences,
   } = useUserStore();
 
   const [activeTab, setActiveTab] = useState<TabId>("ai");
-  const [showKey, setShowKey] = useState(false);
 
   // Form states
   const [displayName, setDisplayName] = useState(currentUser?.displayName || "");
@@ -40,18 +41,13 @@ export default function SettingsPage() {
     }
     setProfileLoading(true); setProfileMsg("");
     try {
-      const res = await fetch("/api/v2/user/settings", {
-        method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: displayName }),
-      });
-      const data = await res.json();
-      if (data.ok) {
-        await login({ ...currentUser, displayName: displayName.trim() });
-        setProfileMsg("已保存");
-        setTimeout(() => setProfileMsg(""), 2000);
-      }
-      else setProfileMsg("保存失败");
-    } catch { setProfileMsg("网络错误"); }
+      await apiSaveUserName(displayName.trim());
+      setProfile({ displayName: displayName.trim() });
+      setProfileMsg("已保存");
+      setTimeout(() => setProfileMsg(""), 2000);
+    } catch (error) {
+      setProfileMsg(errorMessage(error, "保存失败"));
+    }
     setProfileLoading(false);
   }
 
@@ -59,21 +55,13 @@ export default function SettingsPage() {
     if (!oldPw || !newPw) { setPwMsg("请填写旧密码和新密码"); return; }
     setPwLoading(true); setPwMsg("");
     try {
-      const res = await fetch("/api/v2/auth", {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "changePassword", oldPassword: oldPw, newPassword: newPw }),
-      });
-      const data = await res.json();
-      if (data.ok) { setPwMsg("密码修改成功"); setOldPw(""); setNewPw(""); }
-      else { setPwMsg(data.error || "修改失败"); }
-    } catch { setPwMsg("网络错误"); }
+      await apiChangePassword(oldPw, newPw);
+      setPwMsg("密码修改成功"); setOldPw(""); setNewPw("");
+    } catch (error) {
+      setPwMsg(errorMessage(error, "修改失败"));
+    }
     setPwLoading(false);
   }
-  const [apiKey, setApiKey] = useState(aiSettings.apiKey);
-  const [baseUrl, setBaseUrl] = useState(aiSettings.baseUrl);
-  const [model, setModel] = useState(aiSettings.model);
-  const [temperature, setTemperature] = useState(aiSettings.temperature);
-  const [maxTokens, setMaxTokens] = useState(aiSettings.maxTokens);
   const [fontSize, setFontSize] = useState(preferences.fontSize);
   const [theme, setTheme] = useState(preferences.theme);
   const [saved, setSaved] = useState(false);
@@ -82,14 +70,6 @@ export default function SettingsPage() {
     setDisplayName(currentUser?.displayName || "");
     setEmail(currentUser?.email || "");
   }, [currentUser]);
-
-  useEffect(() => {
-    setApiKey(aiSettings.apiKey);
-    setBaseUrl(aiSettings.baseUrl);
-    setModel(aiSettings.model);
-    setTemperature(aiSettings.temperature);
-    setMaxTokens(aiSettings.maxTokens);
-  }, [aiSettings]);
 
   useEffect(() => {
     setFontSize(preferences.fontSize);
@@ -157,17 +137,13 @@ export default function SettingsPage() {
   }
 
   async function handleLogin() {
-    const { apiLogin } = await import("@/lib/api-client-v2");
-    const user = await apiLogin(email, password || "");
-    if (user.error) return;
-    await login({ id: user.id, displayName: user.name || email.split("@")[0] || "读者", email: user.email, avatarUrl: null });
-    setSaved(true); setTimeout(() => setSaved(false), 2000);
-  }
-
-  function handleSaveAI() {
-    updateAISettings({ apiKey, baseUrl, model, temperature, maxTokens });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setProfileMsg("");
+    try {
+      const user = await apiLogin(email, password || "");
+      await login({ id: user.id, displayName: user.name || email.split("@")[0] || "读者", email: user.email, avatarUrl: null });
+    } catch (error) {
+      setProfileMsg(errorMessage(error, "登录失败"));
+    }
   }
 
   function handleSavePreferences() {
@@ -231,6 +207,7 @@ export default function SettingsPage() {
                         <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
                       </div>
                       <Button onClick={handleLogin}>登录</Button>
+                      {profileMsg && <p className="text-sm text-red-500">{profileMsg}</p>}
                     </div>
                   </div>
                 ) : (
@@ -253,7 +230,7 @@ export default function SettingsPage() {
                         <Save className="h-4 w-4" />
                         {profileLoading ? "保存中..." : "保存名称"}
                       </Button>
-                      {profileMsg && <p className={`text-sm ${profileMsg.includes("失败") ? "text-red-500" : "text-green-500"}`}>{profileMsg}</p>}
+                      {profileMsg && <p className={`text-sm ${profileMsg === "已保存" ? "text-green-500" : "text-red-500"}`}>{profileMsg}</p>}
                     </div>
                   </div>
                 )}
@@ -263,77 +240,7 @@ export default function SettingsPage() {
             {activeTab === "ai" && (
               <div className="space-y-4">
                 <h2 className="text-lg font-semibold">AI 设置</h2>
-                <div className="rounded-lg border border-[var(--border)] p-6 space-y-4">
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">DeepSeek API Key</label>
-                    <div className="relative">
-                      <Input
-                        type={showKey ? "text" : "password"}
-                        value={apiKey}
-                        onChange={(e) => setApiKey(e.target.value)}
-                        placeholder="sk-..."
-                      />
-                      <button
-                        onClick={() => setShowKey(!showKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted-foreground)]"
-                      >
-                        {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                    <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                      密钥保存在你的账户设置中，并仅用于向所配置的 AI 服务发起请求
-                    </p>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">API Base URL</label>
-                    <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
-                  </div>
-
-                  <div className="grid gap-4 sm:grid-cols-2">
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">模型</label>
-                      <select
-                        value={model}
-                        onChange={(e) => setModel(e.target.value)}
-                        className="h-9 w-full rounded-md border border-[var(--border)] bg-transparent px-3 text-sm"
-                      >
-                        <option value="deepseek-v4-flash">DeepSeek V4 Flash (快速)</option>
-                        <option value="deepseek-v4-pro">DeepSeek V4 Pro (高质量)</option>
-                        <option value="deepseek-chat">DeepSeek V3 Chat (即将弃用)</option>
-                        <option value="deepseek-reasoner">DeepSeek R1 Reasoner (即将弃用)</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="mb-1 block text-sm font-medium">Temperature</label>
-                      <Input
-                        type="number"
-                        min={0}
-                        max={2}
-                        step={0.1}
-                        value={temperature}
-                        onChange={(e) => setTemperature(parseFloat(e.target.value))}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <label className="mb-1 block text-sm font-medium">Max Tokens</label>
-                    <Input
-                      type="number"
-                      min={256}
-                      max={8192}
-                      step={256}
-                      value={maxTokens}
-                      onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-                    />
-                  </div>
-
-                  <Button onClick={handleSaveAI} className="gap-2">
-                    <Save className="h-4 w-4" />
-                    {saved ? "已保存 ✓" : "保存 AI 设置"}
-                  </Button>
-                </div>
+                <AISettingsForm />
               </div>
             )}
 
@@ -371,7 +278,7 @@ export default function SettingsPage() {
                   </div>
                   <Button onClick={handleSavePreferences} className="gap-2">
                     <Save className="h-4 w-4" />
-                    保存偏好
+                    {saved ? "已保存 ✓" : "保存偏好"}
                   </Button>
                 </div>
               </div>
@@ -408,7 +315,7 @@ export default function SettingsPage() {
                       <hr className="border-[var(--border)]" />
                       <div>
                         <p className="mb-2 text-sm text-[var(--muted-foreground)]">
-                          退出登录将清除本地存储的 AI 设置
+                          退出后需要重新登录才能访问书库
                         </p>
                         <Button
                           variant="destructive"

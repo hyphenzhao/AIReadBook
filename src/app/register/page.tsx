@@ -7,6 +7,7 @@ import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
+import { apiRegister, errorMessage } from "@/lib/api-client-v2";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -20,23 +21,22 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
+    let user;
     try {
-      const { apiRegister } = await import("@/lib/api-client-v2");
-      const user = await apiRegister(email, password, email.split("@")[0]);
-      if (user.error) { setError(user.error); setLoading(false); return; }
-
-      await useUserStore.getState().login({
-        id: user.id,
-        displayName: user.name || email.split("@")[0],
-        email: user.email,
-        avatarUrl: null,
-      });
-      router.push("/library");
-    } catch {
-      setError("注册失败，请稍后重试");
-    } finally {
+      user = await apiRegister(email, password, email.split("@")[0]);
+    } catch (err) {
+      setError(errorMessage(err, "注册失败，请稍后重试"));
       setLoading(false);
+      return;
     }
+
+    void useUserStore.getState().login({
+      id: user.id,
+      displayName: user.name || email.split("@")[0],
+      email: user.email,
+      avatarUrl: null,
+    });
+    router.push("/library");
   }
 
   return (

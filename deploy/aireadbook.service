@@ -1,0 +1,20 @@
+[Unit]
+Description=AIReadBook (Next.js) on :3000
+After=network-online.target mysql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=haifeng
+Group=haifeng
+WorkingDirectory=/Volumes/Storage/Workspace/AIReadBook
+Environment=NODE_ENV=production
+# Next.js reads .env / .env.local from the working directory itself.
+ExecStart=/home/haifeng/.nvm/versions/node/v22.22.3/bin/node node_modules/next/dist/bin/next start -H 0.0.0.0 -p 3000
+Restart=always
+RestartSec=3
+# /Volumes/Storage must be mounted before the app can start.
+RequiresMountsFor=/Volumes/Storage/Workspace/AIReadBook
+
+[Install]
+WantedBy=multi-user.target

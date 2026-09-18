@@ -1,5 +1,5 @@
 import { generateText } from "ai";
-import { createDeepSeekClient, DEEPSEEK_DEFAULT } from "@/lib/ai/client";
+import { getUserLLM, LLMConfigError } from "@/lib/ai/user-llm";
 import { searchAllSources } from "@/lib/search/external-books";
 import { getSessionUserId } from "@/lib/auth-session";
 
@@ -7,7 +7,8 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    if (!(await getSessionUserId())) {
+    const userId = await getSessionUserId();
+    if (!userId) {
       return Response.json({ error: "请先登录" }, { status: 401 });
     }
     const { bookTitle, bookAuthor, topics } = await req.json();
@@ -24,9 +25,9 @@ ${topics && topics.length > 0 ? `这本书涉及的主题包括：${topics.join(
 输出格式：每行一本，格式为 "书名 - 作者：理由"
 只输出推荐列表，不要其他内容。`;
 
-    const client = createDeepSeekClient();
+    const llm = await getUserLLM(userId);
     const result = await generateText({
-      model: client(DEEPSEEK_DEFAULT),
+      model: llm.model,
       prompt,
       temperature: 0.7,
       maxTokens: 500,
@@ -63,6 +64,9 @@ ${topics && topics.length > 0 ? `这本书涉及的主题包括：${topics.join(
       recommendations: recommendations.filter(Boolean),
     });
   } catch (error) {
+    if (error instanceof LLMConfigError) {
+      return Response.json({ error: error.message }, { status: error.status });
+    }
     console.error("Recommendation error:", error);
     return Response.json(
       { error: "Recommendation generation failed" },

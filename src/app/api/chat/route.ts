@@ -1,5 +1,5 @@
 import { streamText } from "ai";
-import { createDeepSeekClient, DEEPSEEK_DEFAULT } from "@/lib/ai/client";
+import { getUserLLM, LLMConfigError } from "@/lib/ai/user-llm";
 import { COMPANION_SYSTEM_PROMPT } from "@/lib/ai/prompts/companion";
 import { SUMMARY_SYSTEM_PROMPT } from "@/lib/ai/prompts/summary";
 import { EXTRACTION_SYSTEM_PROMPT } from "@/lib/ai/prompts/extraction";
@@ -10,7 +10,6 @@ import {
 } from "@/lib/ai/reading-pipeline";
 import type { ChatMode } from "@/types";
 import { getSessionUserId } from "@/lib/auth-session";
-import { isIP } from "net";
 
 const SYSTEM_PROMPTS: Record<ChatMode, string> = {
   companion: COMPANION_SYSTEM_PROMPT,
@@ -20,27 +19,6 @@ const SYSTEM_PROMPTS: Record<ChatMode, string> = {
 };
 
 export const maxDuration = 60;
-
-function isSafeBaseUrl(value: string) {
-  try {
-    const url = new URL(value);
-    if (url.protocol !== "https:" && !(process.env.NODE_ENV !== "production" && url.protocol === "http:")) return false;
-    const host = url.hostname.toLowerCase();
-    if (host === "localhost" || host.endsWith(".local") || host === "::1") return false;
-    if (isIP(host)) {
-      if (
-        host.startsWith("10.") ||
-        host.startsWith("127.") ||
-        host.startsWith("192.168.") ||
-        host.startsWith("169.254.") ||
-        /^172\.(1[6-9]|2\d|3[01])\./.test(host)
-      ) return false;
-    }
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 export async function POST(req: Request) {
   try {
@@ -55,21 +33,13 @@ export async function POST(req: Request) {
     const chapterIndex = body.chapterIndex === undefined || body.chapterIndex === null
       ? undefined
       : Number(body.chapterIndex);
-    const userApiKey = String(body.apiKey || process.env.DEEPSEEK_API_KEY || "");
-    const userBaseUrl = String(body.baseUrl || process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com");
-    const userModel = String(body.model || DEEPSEEK_DEFAULT);
-    const temperature = Math.max(0, Math.min(2, Number(body.temperature) || 0.7));
-    const maxTokens = Math.max(256, Math.min(8192, Number(body.maxTokens) || 4096));
 
-    if (!userApiKey) {
-      return Response.json({ error: "请先在设置页面配置 DeepSeek API Key" }, { status: 401 });
-    }
     if (!bookId) {
       return Response.json({ error: "Missing bookId" }, { status: 400 });
     }
-    if (!isSafeBaseUrl(userBaseUrl)) {
-      return Response.json({ error: "API Base URL 不安全或无效" }, { status: 400 });
-    }
+    // Key, endpoint and model come from the account's saved settings; the
+    // browser never sends them.
+    const llm = await getUserLLM(userId);
     if (messages.length > 50 || messages.some((m: any) => !["user", "assistant"].includes(m?.role) || typeof m?.content !== "string" || m.content.length > 50_000)) {
       return Response.json({ error: "消息格式无效或内容过长" }, { status: 400 });
     }
@@ -128,19 +98,27 @@ ${reading.context}`;
 
     const augmentedMessages = messages.map((message: any) => ({ ...message }));
 
-    const client = createDeepSeekClient(userApiKey, userBaseUrl);
-
     const result = streamText({
-      model: client(userModel),
+      model: llm.model,
       system: systemPrompt,
       messages: augmentedMessages.slice(-20),
-      temperature,
-      maxTokens,
+      temperature: llm.temperature,
+      maxTokens: llm.maxTokens,
     });
 
-    return result.toDataStreamResponse();
+    return result.toDataStreamResponse({
+      // Without this the client only ever sees "An error occurred".
+      getErrorMessage: (error) => {
+        console.error("Chat stream error:", error);
+        const status = (error as any)?.statusCode;
+        if (status === 401 || status === 403) return "AI 服务拒绝了 API Key，请在设置中检查";
+        if (status === 404) return "AI 服务找不到所选模型，请在设置中重新选择";
+        if (status === 429) return "AI 服务请求过于频繁或额度不足";
+        return "AI 服务出错，请稍后重试";
+      },
+    });
   } catch (error) {
-    if (error instanceof ReadingContextError) {
+    if (error instanceof ReadingContextError || error instanceof LLMConfigError) {
       return Response.json({ error: error.message }, { status: error.status });
     }
     console.error("Chat API error:", error);

@@ -44,3 +44,7 @@ next-env.d.ts
 .vscode/
 *.swp
 *.swo
+
+# side build directory used by deploy/deploy.sh
+/.next-build/
+/.next-prev/

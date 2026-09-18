@@ -1,62 +1,65 @@
-import { createHmac, timingSafeEqual } from "crypto";
 import { cookies } from "next/headers";
+import {
+  COOKIE_NAME,
+  SESSION_SECONDS,
+  shouldRenew,
+  signSessionToken,
+  verifySessionToken,
+  type SessionClaims,
+} from "@/lib/session-token";
 
-const COOKIE_NAME = "aireadbook_session";
-const SESSION_SECONDS = 60 * 60 * 24 * 30;
-
-function secret() {
-  const value = process.env.AUTH_SECRET || process.env.DATABASE_URL;
-  if (!value) {
-    throw new Error("AUTH_SECRET is required");
+/**
+ * The signing secret must be its own value. It used to fall back to
+ * DATABASE_URL, which meant any change to the connection string silently
+ * logged every user out.
+ */
+export function authSecret() {
+  const value = process.env.AUTH_SECRET;
+  if (!value || value.length < 16) {
+    throw new Error("AUTH_SECRET is required (at least 16 characters)");
   }
   return value;
 }
 
-function signature(value: string) {
-  return createHmac("sha256", secret()).update(value).digest("base64url");
+function cookieOptions(maxAge: number) {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.AUTH_COOKIE_SECURE === "true",
+    path: "/",
+    maxAge,
+  };
 }
 
 export async function createSession(userId: number) {
-  const expires = Math.floor(Date.now() / 1000) + SESSION_SECONDS;
-  const payload = `${userId}.${expires}`;
-  const token = `${payload}.${signature(payload)}`;
+  const { token } = await signSessionToken(userId, authSecret());
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.AUTH_COOKIE_SECURE === "true",
-    path: "/",
-    maxAge: SESSION_SECONDS,
-  });
+  cookieStore.set(COOKIE_NAME, token, cookieOptions(SESSION_SECONDS));
 }
 
 export async function clearSession() {
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, "", {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.AUTH_COOKIE_SECURE === "true",
-    path: "/",
-    maxAge: 0,
-  });
+  cookieStore.set(COOKIE_NAME, "", cookieOptions(0));
+}
+
+async function getSessionClaims(): Promise<SessionClaims | null> {
+  const cookieStore = await cookies();
+  return verifySessionToken(cookieStore.get(COOKIE_NAME)?.value, authSecret());
 }
 
 export async function getSessionUserId(): Promise<number | null> {
-  const cookieStore = await cookies();
-  const token = cookieStore.get(COOKIE_NAME)?.value;
-  if (!token) return null;
+  return (await getSessionClaims())?.userId ?? null;
+}
 
-  const [rawId, rawExpires, suppliedSignature] = token.split(".");
-  const userId = Number(rawId);
-  const expires = Number(rawExpires);
-  if (!Number.isInteger(userId) || userId <= 0 || !Number.isFinite(expires)) return null;
-  if (expires <= Math.floor(Date.now() / 1000) || !suppliedSignature) return null;
-
-  const expected = signature(`${rawId}.${rawExpires}`);
-  const suppliedBuffer = Buffer.from(suppliedSignature);
-  const expectedBuffer = Buffer.from(expected);
-  if (suppliedBuffer.length !== expectedBuffer.length) return null;
-  return timingSafeEqual(suppliedBuffer, expectedBuffer) ? userId : null;
+/**
+ * Sliding expiry: call from a route handler that is hit on every page load.
+ * Returns the user id, re-issuing the cookie when it is past half its life.
+ */
+export async function getSessionUserIdAndRenew(): Promise<number | null> {
+  const claims = await getSessionClaims();
+  if (!claims) return null;
+  if (shouldRenew(claims)) await createSession(claims.userId);
+  return claims.userId;
 }
 
 export async function requireSessionUserId(): Promise<number> {

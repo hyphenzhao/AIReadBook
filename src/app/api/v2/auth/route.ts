@@ -1,20 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
-import { clearSession, createSession, getSessionUserId } from "@/lib/auth-session";
+import { clearSession, createSession, getSessionUserId, getSessionUserIdAndRenew } from "@/lib/auth-session";
 
 export async function GET() {
-  const userId = await getSessionUserId();
-  if (!userId) return NextResponse.json({ user: null }, { status: 401 });
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    select: { id: true, email: true, name: true },
-  });
-  if (!user) {
-    await clearSession();
-    return NextResponse.json({ user: null }, { status: 401 });
+  try {
+    // Hit on every page load, so this is where the 30-day session slides.
+    const userId = await getSessionUserIdAndRenew();
+    if (!userId) return NextResponse.json({ user: null }, { status: 401 });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true, email: true, name: true },
+    });
+    if (!user) {
+      await clearSession();
+      return NextResponse.json({ user: null }, { status: 401 });
+    }
+    return NextResponse.json({ user });
+  } catch (e) {
+    // A database hiccup is not a logout: 503 tells the client to keep its
+    // state and retry, where 401 means the session is really gone.
+    console.error("Session check failed:", e);
+    return NextResponse.json({ error: "认证服务暂时不可用" }, { status: 503 });
   }
-  return NextResponse.json({ user });
 }
 
 export async function POST(req: NextRequest) {

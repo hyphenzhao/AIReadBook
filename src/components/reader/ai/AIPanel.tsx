@@ -59,6 +59,15 @@ function isMindMapNode(value: unknown): value is MindMapNode {
   );
 }
 
+// useChat surfaces a failed request's raw body, which is our `{ error }` JSON.
+function chatErrorText(error: Error) {
+  try {
+    const parsed = JSON.parse(error.message);
+    if (typeof parsed?.error === "string") return parsed.error;
+  } catch {}
+  return error.message || "AI 服务出错，请检查 AI 设置和网络连接";
+}
+
 export function AIPanel() {
   const { aiMode, setAiMode, currentBook, currentChapter, pendingAskAI, clearAskAI } =
     useReadingStore();
@@ -75,8 +84,9 @@ export function AIPanel() {
   const bottomRef = useRef<HTMLDivElement>(null);
   const thinkingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const hasApiKey = !!aiSettings.apiKey;
-  const isDev = !hasApiKey;
+  const aiSettingsLoaded = useUserStore((s) => s.aiSettingsLoaded);
+  // Only warn once we know the saved settings; the key itself stays on the server.
+  const isDev = aiSettingsLoaded && !aiSettings.ready;
   const bookSessions = currentBook ? getBookSessions(currentBook.id) : [];
   const activeSession = activeSessionId
     ? sessions.find((s) => s.id === activeSessionId)
@@ -89,12 +99,7 @@ export function AIPanel() {
     chapterId: currentChapter?.id,
     chapterIndex: currentChapter?.index,
     mode: aiMode,
-    apiKey: aiSettings.apiKey,
-    baseUrl: aiSettings.baseUrl,
-    model: aiSettings.model,
-    temperature: aiSettings.temperature,
-    maxTokens: aiSettings.maxTokens,
-  }), [currentBook?.id, currentBook?.title, currentChapter?.id, currentChapter?.index, aiMode, aiSettings.apiKey, aiSettings.baseUrl, aiSettings.model, aiSettings.temperature, aiSettings.maxTokens]);
+  }), [currentBook?.id, currentBook?.title, currentChapter?.id, currentChapter?.index, aiMode]);
 
   // --- Chat session management ---
   const { messages, append, isLoading, stop, error, setMessages } = useChat({
@@ -429,7 +434,7 @@ export function AIPanel() {
       {/* Error display */}
       {error && (
         <div className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
-          {error.message || "AI 服务出错，请检查 API Key 和网络连接"}
+          {chatErrorText(error)}
         </div>
       )}
       {sessionError && (
