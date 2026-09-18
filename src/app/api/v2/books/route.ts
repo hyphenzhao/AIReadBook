@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUserId, sessionError } from "@/lib/auth-session";
 import { enqueueBookIndexing } from "@/lib/knowledge/index-book";
+import { chapterLabel } from "@/lib/text/chapter-label";
 
 export async function GET() {
   try {
@@ -34,7 +35,14 @@ export async function POST(req: NextRequest) {
   });
   if (chapters.length) {
     await prisma.chapter.createMany({
-      data: chapters.map((ch: any) => ({ bookId: book.id, index: ch.index, title: ch.title, content: ch.plainText || "", wordCount: ch.wordCount || 0 })),
+      // chapterLabel replaces empty or publisher-label titles with a heading from the text.
+      data: chapters.map((ch: any) => ({
+        bookId: book.id,
+        index: ch.index,
+        title: chapterLabel({ index: ch.index, title: ch.title ?? null, content: ch.plainText || "" }).slice(0, 500),
+        content: ch.plainText || "",
+        wordCount: ch.wordCount || 0,
+      })),
     });
   }
   // Chunk + embed in the background; the book is readable straight away.

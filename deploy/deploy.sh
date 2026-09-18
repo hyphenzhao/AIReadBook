@@ -57,9 +57,16 @@ fi
 # Prisma cannot declare a FULLTEXT parser. Chinese text needs ngram, or MATCH()
 # finds nothing, so rebuild any of our fulltext indexes that lack it.
 ensure_ngram() { # table, index, columns
-  if ! MYSQL_PWD="$db_pass" mysql -h "$db_host" -u "$db_user" "$db_name" -N -e "SHOW CREATE TABLE $1" | grep -q "KEY \`$2\`.*ngram"; then
+  # --comments: the parser is reported as /*!50100 WITH PARSER `ngram` */, which
+  # the client strips by default. The pattern stops at the next comma so it
+  # only looks at this one index.
+  if ! MYSQL_PWD="$db_pass" mysql --comments -h "$db_host" -u "$db_user" "$db_name" -N -e "SHOW CREATE TABLE $1" \
+      | grep -q "KEY \`$2\` ([^)]*) [^,]*ngram"; then
     echo "rebuilding $1.$2 with the ngram parser"
-    MYSQL_PWD="$db_pass" mysql -h "$db_host" -u "$db_user" "$db_name" -e       "ALTER TABLE $1 DROP INDEX $2, ADD FULLTEXT INDEX $2 ($3) WITH PARSER ngram"
+    # Two statements: DROP + ADD of the same name in one ALTER is optimised
+    # into keeping the old index, parser and all.
+    MYSQL_PWD="$db_pass" mysql -h "$db_host" -u "$db_user" "$db_name" -e \
+      "ALTER TABLE $1 DROP INDEX $2; ALTER TABLE $1 ADD FULLTEXT INDEX $2 ($3) WITH PARSER ngram;"
   fi
 }
 ensure_ngram chapters ft_chapter_content "title, content"

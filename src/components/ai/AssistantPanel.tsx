@@ -84,7 +84,13 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
     mode,
   }), [context?.bookId, context?.bookTitle, context?.unitId, context?.unitIndex, mode]);
 
-  const { messages, append, isLoading, stop, error, setMessages } = useChat({ api: "/api/chat", body: chatBody });
+  // Id of an answer that stopped because it hit the Max Tokens setting.
+  const [truncatedId, setTruncatedId] = useState<string | null>(null);
+  const { messages, append, isLoading, stop, error, setMessages } = useChat({
+    api: "/api/chat",
+    body: chatBody,
+    onFinish: (message, { finishReason }) => setTruncatedId(finishReason === "length" ? message.id : null),
+  });
 
   // A conversation belongs to one mode; switching mode starts a fresh one —
   // unless the switch was made in order to reopen a saved conversation.
@@ -304,6 +310,12 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
                     <>
                       {sourceData && <SourcesStrip data={sourceData} currentChapterId={context?.unitId ?? null} onCite={onCite} />}
                       <CitationMarkdown content={msg.content} sources={sourceData?.sources} onCite={onCite} />
+                      {msg.id === truncatedId && (
+                        <p className="mt-2 border-t border-[var(--border)] pt-2 text-xs text-amber-600">
+                          回答达到了长度上限，被截断了。可以让我「继续」，或在
+                          <Link href="/settings?tab=ai" className="underline">AI 设置</Link>里调大 Max Tokens。
+                        </p>
+                      )}
                     </>
                   ) : (
                     <div className="whitespace-pre-wrap break-words">{msg.content}</div>

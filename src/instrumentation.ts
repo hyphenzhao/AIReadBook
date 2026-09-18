@@ -10,7 +10,11 @@ export async function register() {
 
   const { startJobWorker } = await import("@/lib/jobs/worker");
   const { enqueueUnindexedBooks } = await import("@/lib/knowledge/index-book");
+  const { repairChapterTitles } = await import("@/lib/knowledge/repair-titles");
   startJobWorker();
+  repairChapterTitles()
+    .then((count) => count && console.info(`[startup] named ${count} chapter(s) that had no usable title`))
+    .catch((error) => console.error("[startup] could not repair chapter titles", error));
   enqueueUnindexedBooks()
     .then((count) => count && console.info(`[jobs] queued indexing for ${count} book(s)`))
     .catch((error) => console.error("[jobs] could not queue book indexing", error));

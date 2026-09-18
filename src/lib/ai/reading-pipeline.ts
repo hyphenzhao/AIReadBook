@@ -3,6 +3,7 @@ import { embedQuery } from "@/lib/embedding/client";
 import { extractSearchTerms, formatRetrievalContext, retrieveRelevantPassages } from "@/lib/rag/book-retriever";
 import { isSufficient, searchPassages, type PassageHit } from "@/lib/retrieval/search";
 import { buildWebQuery, wantsOutsideKnowledge, webSearch, type WebResult } from "@/lib/web-search";
+import { chapterLabel } from "@/lib/text/chapter-label";
 import type { ChatMode } from "@/types";
 
 /**
@@ -384,29 +385,6 @@ function takeEvenExcerpts(content: string, budget: number): string {
     content.slice(middleStart, middleStart + segmentLength),
     content.slice(-segmentLength),
   ].join(separator);
-}
-
-export function chapterLabel(chapter: { index: number; title: string | null; content?: string }): string {
-  const title = chapter.title?.trim();
-
-  // Some public-domain EPUBs reuse a publisher label (for example
-  // “传硕公版书”) as every navigation title. In that case use the first short,
-  // distinct正文 heading so the model receives a meaningful chapter identity.
-  if (!title || /(公版书|电子书|ebook|untitled|无标题)/i.test(title)) {
-    const derived = (chapter.content ?? "")
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find((line) =>
-        line.length >= 2 &&
-        line.length <= 40 &&
-        line !== title &&
-        !/^https?:\/\//i.test(line) &&
-        !/^(关于我们|制作说明|版权|目录)$/.test(line),
-      );
-    if (derived) return derived;
-  }
-
-  return title || `第${chapter.index + 1}章`;
 }
 
 function parsePositiveInt(value?: string): number | null {
