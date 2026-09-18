@@ -152,3 +152,42 @@ export async function apiSaveUserName(name: string) {
 export async function apiListModels(draft?: { apiKey?: string; baseUrl?: string }): Promise<{ models: string[] }> {
   return post("/api/v2/ai/models", draft ?? {});
 }
+
+// --- Registration availability (public) ---
+export async function apiGetAuthConfig(): Promise<{ registrationOpen: boolean }> {
+  return get("/api/v2/auth/config", { expectAuth: false });
+}
+
+// --- Admin ---
+export type UserRole = "ADMIN" | "USER";
+export interface AdminUser {
+  id: number;
+  email: string;
+  name: string;
+  role: UserRole;
+  disabled: boolean;
+  lastLoginAt: string | null;
+  createdAt: string;
+  bookCount: number;
+}
+export interface AdminUserPatch { name?: string; email?: string; password?: string; role?: UserRole; disabled?: boolean }
+export interface AppSettings { allowRegistration: boolean }
+
+export async function apiAdminListUsers(): Promise<{ users: AdminUser[] }> {
+  return get("/api/v2/admin/users");
+}
+export async function apiAdminCreateUser(data: { email: string; password: string; name?: string; role?: UserRole }): Promise<{ user: AdminUser }> {
+  return post("/api/v2/admin/users", data);
+}
+export async function apiAdminUpdateUser(id: number, data: AdminUserPatch): Promise<{ user: AdminUser }> {
+  return patch(`/api/v2/admin/users/${id}`, data);
+}
+export async function apiAdminDeleteUser(id: number) {
+  await del(`/api/v2/admin/users/${id}`);
+}
+export async function apiAdminGetSettings(): Promise<{ settings: AppSettings }> {
+  return get("/api/v2/admin/settings");
+}
+export async function apiAdminSaveSettings(settings: Partial<AppSettings>): Promise<{ settings: AppSettings }> {
+  return patch("/api/v2/admin/settings", settings);
+}

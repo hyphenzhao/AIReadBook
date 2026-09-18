@@ -13,7 +13,6 @@ const nextConfig: NextConfig = {
   },
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "**.supabase.co" },
       { protocol: "https", hostname: "books.google.com" },
       { protocol: "https", hostname: "covers.openlibrary.org" },
     ],

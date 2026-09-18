@@ -1,13 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
-import { apiRegister, errorMessage } from "@/lib/api-client-v2";
+import { apiGetAuthConfig, apiRegister, errorMessage } from "@/lib/api-client-v2";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -15,6 +15,11 @@ export default function RegisterPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  // null while unknown, so the form does not flash before "closed" shows.
+  const [registrationOpen, setRegistrationOpen] = useState<boolean | null>(null);
+  useEffect(() => {
+    apiGetAuthConfig().then((c) => setRegistrationOpen(c.registrationOpen)).catch(() => setRegistrationOpen(true));
+  }, []);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -35,6 +40,7 @@ export default function RegisterPage() {
       displayName: user.name || email.split("@")[0],
       email: user.email,
       avatarUrl: null,
+      role: user.role === "ADMIN" ? "ADMIN" : "USER",
     });
     router.push("/library");
   }
@@ -48,7 +54,13 @@ export default function RegisterPage() {
           <p className="mt-1 text-sm text-[var(--muted-foreground)]">开始你的 AI 深度阅读之旅</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {registrationOpen === false && (
+          <p className="rounded-md border border-[var(--border)] bg-[var(--accent)] px-3 py-3 text-center text-sm">
+            本站未开放注册，请联系管理员为你创建账号。
+          </p>
+        )}
+
+        <form onSubmit={handleSubmit} className={registrationOpen ? "space-y-4" : "hidden"}>
           <div>
             <label className="mb-1 block text-sm font-medium">邮箱</label>
             <Input

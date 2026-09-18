@@ -1,7 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("next/headers", () => ({ cookies: vi.fn() }));
-
+import { beforeEach, describe, expect, it } from "vitest";
 import { isSealed, maskSecret, openSecret, sealSecret } from "./secret-box";
 
 beforeEach(() => {

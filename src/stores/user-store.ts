@@ -5,7 +5,7 @@ import type { AISettingsPatch, AISettingsView } from "@/lib/api-client-v2";
 
 export type AISettings = AISettingsView;
 export interface UserPreferences { fontSize: number; lineHeight: number; fontFamily: string; theme: "light" | "dark" | "sepia"; language: "zh" | "en"; }
-export interface UserProfile { id: number; displayName: string; email: string; avatarUrl: string | null; }
+export interface UserProfile { id: number; displayName: string; email: string; avatarUrl: string | null; role: api.UserRole; }
 
 interface UserState {
   isLoggedIn: boolean;
@@ -60,6 +60,7 @@ export const useUserStore = create<UserState>()(persist((set, get) => ({
           displayName: user.name || user.email.split("@")[0],
           email: user.email,
           avatarUrl: null,
+          role: user.role === "ADMIN" ? "ADMIN" as const : "USER" as const,
         };
         set({ isLoggedIn: true, currentUser: profile, sessionReady: true, sessionCheckFailed: false });
         await get().loadSettings(profile.id);
@@ -85,6 +86,9 @@ export const useUserStore = create<UserState>()(persist((set, get) => ({
       import("@/stores/annotation-store"),
       import("@/stores/chat-store"),
     ]);
+    // Knowledge cards, mind maps and review progress are deliberately left
+    // alone: localStorage is still their only copy, so clearing them here
+    // would destroy data. They move to the server with the knowledge rework.
     useLibraryStore.setState({ books: [], ready: false });
     useAnnotationStore.setState({ annotations: [], ready: false });
     useChatStore.setState({ sessions: [], ready: false });

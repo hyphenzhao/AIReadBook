@@ -7,7 +7,7 @@ import { Sparkles, Eye, EyeOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
-import { apiLogin, errorMessage } from "@/lib/api-client-v2";
+import { apiGetAuthConfig, apiLogin, errorMessage } from "@/lib/api-client-v2";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -40,12 +40,17 @@ export default function LoginPage() {
       displayName: user.name || email.split("@")[0],
       email: user.email,
       avatarUrl: null,
+      role: user.role === "ADMIN" ? "ADMIN" : "USER",
     });
     const next = new URLSearchParams(window.location.search).get("next");
     router.push(next?.startsWith("/") && !next.startsWith("//") ? next : "/library");
   }
 
   const [notice, setNotice] = useState("");
+  const [registrationOpen, setRegistrationOpen] = useState(false);
+  useEffect(() => {
+    apiGetAuthConfig().then((c) => setRegistrationOpen(c.registrationOpen)).catch(() => {});
+  }, []);
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("reason") === "expired") {
       setNotice("登录已过期，请重新登录");
@@ -105,10 +110,16 @@ export default function LoginPage() {
         </form>
 
         <p className="mt-6 text-center text-sm text-[var(--muted-foreground)]">
-          还没有账号？{" "}
-          <Link href="/register" className="text-[var(--primary)] hover:underline">
-            注册
-          </Link>
+          {registrationOpen ? (
+            <>
+              还没有账号？{" "}
+              <Link href="/register" className="text-[var(--primary)] hover:underline">
+                注册
+              </Link>
+            </>
+          ) : (
+            "没有账号？请联系管理员创建。"
+          )}
         </p>
       </div>
     </div>

@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Settings, Brain, LogOut, Search, Network } from "lucide-react";
+import { User, Users, Settings, Brain, LogOut, Search, Network } from "lucide-react";
 import { useUserStore } from "@/stores/user-store";
 
 export function UserMenu() {
@@ -85,6 +85,16 @@ export function UserMenu() {
               <Settings className="h-4 w-4" />
               设置
             </Link>
+            {currentUser?.role === "ADMIN" && (
+              <Link
+                href="/settings?tab=users"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--accent)]"
+              >
+                <Users className="h-4 w-4" />
+                用户管理
+              </Link>
+            )}
             {isLoggedIn ? (
               <button
                 onClick={async () => {

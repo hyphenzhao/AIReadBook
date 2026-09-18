@@ -4,15 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
-  ArrowLeft, Settings, User, Brain, BookOpen, Key, Save, LogOut, Database, Download, Upload,
+  ArrowLeft, Settings, User, Users, Brain, BookOpen, Key, Save, LogOut, Database, Download, Upload,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
 import { AISettingsForm } from "@/components/settings/AISettingsForm";
+import { UserManagement } from "@/components/settings/UserManagement";
 import { apiChangePassword, apiLogin, apiSaveUserName, errorMessage } from "@/lib/api-client-v2";
 
-type TabId = "profile" | "ai" | "reading" | "account" | "data";
+type TabId = "profile" | "ai" | "reading" | "account" | "data" | "users";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -67,6 +68,13 @@ export default function SettingsPage() {
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
+    const requested = new URLSearchParams(window.location.search).get("tab");
+    if (requested && ["profile", "ai", "reading", "account", "data", "users"].includes(requested)) {
+      setActiveTab(requested as TabId);
+    }
+  }, []);
+
+  useEffect(() => {
     setDisplayName(currentUser?.displayName || "");
     setEmail(currentUser?.email || "");
   }, [currentUser]);
@@ -82,6 +90,8 @@ export default function SettingsPage() {
     { id: "reading", label: "阅读偏好", icon: BookOpen },
     { id: "account", label: "账号安全", icon: Key },
     { id: "data", label: "数据管理", icon: Database },
+    // The API enforces this too; hiding the tab is only a courtesy.
+    ...(currentUser?.role === "ADMIN" ? [{ id: "users" as const, label: "用户管理", icon: Users }] : []),
   ];
 
   // --- Data export/import ---
@@ -140,7 +150,7 @@ export default function SettingsPage() {
     setProfileMsg("");
     try {
       const user = await apiLogin(email, password || "");
-      await login({ id: user.id, displayName: user.name || email.split("@")[0] || "读者", email: user.email, avatarUrl: null });
+      await login({ id: user.id, displayName: user.name || email.split("@")[0] || "读者", email: user.email, avatarUrl: null, role: user.role === "ADMIN" ? "ADMIN" : "USER" });
     } catch (error) {
       setProfileMsg(errorMessage(error, "登录失败"));
     }
@@ -342,6 +352,8 @@ export default function SettingsPage() {
                 </div>
               </div>
             )}
+
+            {activeTab === "users" && currentUser?.role === "ADMIN" && <UserManagement />}
 
             {activeTab === "data" && (
               <div className="space-y-4">

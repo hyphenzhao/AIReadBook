@@ -9,7 +9,7 @@ import {
   runReadingPipeline,
 } from "@/lib/ai/reading-pipeline";
 import type { ChatMode } from "@/types";
-import { getSessionUserId } from "@/lib/auth-session";
+import { requireSessionUserId } from "@/lib/auth-session";
 
 const SYSTEM_PROMPTS: Record<ChatMode, string> = {
   companion: COMPANION_SYSTEM_PROMPT,
@@ -22,8 +22,7 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
-    const userId = await getSessionUserId();
-    if (!userId) return Response.json({ error: "请先登录" }, { status: 401 });
+    const userId = await requireSessionUserId();
     const body = await req.json();
     const messages = Array.isArray(body.messages) ? body.messages : [];
     const mode: ChatMode = body.mode in SYSTEM_PROMPTS ? body.mode : "companion";
@@ -118,6 +117,7 @@ ${reading.context}`;
       },
     });
   } catch (error) {
+    if (error instanceof Response) return error;
     if (error instanceof ReadingContextError || error instanceof LLMConfigError) {
       return Response.json({ error: error.message }, { status: error.status });
     }

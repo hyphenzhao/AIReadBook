@@ -1,5 +1,5 @@
 import { createCipheriv, createDecipheriv, hkdfSync, randomBytes } from "crypto";
-import { authSecret } from "@/lib/auth-session";
+import { authSecret } from "@/lib/auth-secret";
 
 /**
  * Encrypts small secrets (provider API keys) before they are stored in MySQL.

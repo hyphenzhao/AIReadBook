@@ -1,4 +1,6 @@
 import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import { authSecret } from "@/lib/auth-secret";
 import {
   COOKIE_NAME,
   SESSION_SECONDS,
@@ -8,18 +10,7 @@ import {
   type SessionClaims,
 } from "@/lib/session-token";
 
-/**
- * The signing secret must be its own value. It used to fall back to
- * DATABASE_URL, which meant any change to the connection string silently
- * logged every user out.
- */
-export function authSecret() {
-  const value = process.env.AUTH_SECRET;
-  if (!value || value.length < 16) {
-    throw new Error("AUTH_SECRET is required (at least 16 characters)");
-  }
-  return value;
-}
+export { authSecret };
 
 function cookieOptions(maxAge: number) {
   return {
@@ -47,6 +38,7 @@ async function getSessionClaims(): Promise<SessionClaims | null> {
   return verifySessionToken(cookieStore.get(COOKIE_NAME)?.value, authSecret());
 }
 
+/** The id in a validly signed cookie. Does not check the account still exists. */
 export async function getSessionUserId(): Promise<number | null> {
   return (await getSessionClaims())?.userId ?? null;
 }
@@ -62,15 +54,36 @@ export async function getSessionUserIdAndRenew(): Promise<number | null> {
   return claims.userId;
 }
 
-export async function requireSessionUserId(): Promise<number> {
+function deny(status: number, error: string): never {
+  throw new Response(JSON.stringify({ error }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
+}
+
+/**
+ * A signed cookie stays valid for 30 days, so the account is looked up on
+ * each request: deleting or disabling a user takes effect immediately.
+ */
+async function requireActiveUser() {
   const userId = await getSessionUserId();
-  if (!userId) {
-    throw new Response(JSON.stringify({ error: "请先登录" }), {
-      status: 401,
-      headers: { "Content-Type": "application/json" },
-    });
-  }
-  return userId;
+  if (!userId) deny(401, "请先登录");
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, role: true, disabled: true },
+  });
+  if (!user || user.disabled) deny(401, "账号不存在或已被停用");
+  return user;
+}
+
+export async function requireSessionUserId(): Promise<number> {
+  return (await requireActiveUser()).id;
+}
+
+export async function requireAdminUserId(): Promise<number> {
+  const user = await requireActiveUser();
+  if (user.role !== "ADMIN") deny(403, "需要管理员权限");
+  return user.id;
 }
 
 export function sessionError(error: unknown) {

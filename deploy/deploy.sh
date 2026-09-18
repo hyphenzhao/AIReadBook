@@ -55,7 +55,7 @@ if [ -f prisma/post-push.sql ]; then
 fi
 
 log "Type-check and unit tests"
-npx tsc --noEmit
+npx tsc --noEmit -p tsconfig.typecheck.json
 npx vitest run
 
 log "Building into .next-build"

@@ -13,6 +13,9 @@ model User {
   name      String    @db.VarChar(100)
   password   String    @db.VarChar(255)  // hashed
   aiSettings Json?     @map("ai_settings")
+  role        UserRole  @default(USER)
+  disabled    Boolean   @default(false)
+  lastLoginAt DateTime? @map("last_login_at")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime  @updatedAt @map("updated_at")
 
@@ -21,6 +24,20 @@ model User {
   reviewCards ReviewCard[]
 
   @@map("users")
+}
+
+enum UserRole {
+  ADMIN
+  USER
+}
+
+/// Instance-wide settings edited by admins (registration switch, search API keys, ...).
+model AppSetting {
+  key       String   @id @db.VarChar(100)
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("app_settings")
 }
 
 model Book {

@@ -1,0 +1,8 @@
+{
+  // Source-only type check. tsconfig.json also includes .next/types, which
+  // belongs to whichever build is live and goes stale when routes are removed.
+  "extends": "./tsconfig.json",
+  "compilerOptions": { "incremental": false },
+  "include": ["next-env.d.ts", "src/**/*.ts", "src/**/*.tsx", "*.ts"],
+  "exclude": ["node_modules", ".next", ".next-build", ".next-prev"]
+}
