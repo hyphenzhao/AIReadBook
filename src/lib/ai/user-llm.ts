@@ -50,7 +50,10 @@ const clamp = (value: unknown, min: number, max: number, fallback: number) => {
 };
 
 function serverKey() {
-  return process.env.DEEPSEEK_API_KEY || "";
+  const key = (process.env.DEEPSEEK_API_KEY || "").trim();
+  // The value copied from .env.local.example is not a key. Counting it would
+  // tell every user "AI is ready" and then fail each request with a 401.
+  return /your|placeholder|change-?me|example|x{4,}/i.test(key) ? "" : key;
 }
 function serverBaseUrl() {
   return normalizeBaseUrl(process.env.DEEPSEEK_BASE_URL || DEFAULT_BASE_URL);
@@ -156,17 +159,29 @@ function resolveCredentials(stored: StoredAISettings, draft?: { apiKey?: string;
   throw new LLMConfigError("请先在「设置 → AI 设置」中填写 API Key", 412);
 }
 
-/** The model client for a user, configured entirely on the server. */
-export async function getUserLLM(userId: number) {
+// Reasoning models bill their hidden thinking against max_tokens, so a limit
+// meant for the visible answer needs room on top or the answer gets squeezed
+// out (seen in practice: 2048 tokens spent, nothing shown).
+const REASONING_HEADROOM = 4096;
+const STRUCTURED_MAX_TOKENS = 8192;
+
+/**
+ * The model client for a user, configured entirely on the server.
+ * - "chat": the reader's own settings; Max Tokens budgets the visible answer.
+ * - "structured": summaries, cards, graph extraction — low temperature, a
+ *   fixed generous limit, and thinking switched off where possible.
+ */
+export async function getUserLLM(userId: number, task: "chat" | "structured" = "chat") {
   const stored = await loadStored(userId);
   const { apiKey, baseUrl } = resolveCredentials(stored);
   const view = toView(stored);
-  const client = createLLMClient(apiKey, baseUrl);
+  const structured = task === "structured";
+  const client = createLLMClient(apiKey, baseUrl, { disableThinking: structured });
   return {
     model: client(view.model),
     modelId: view.model,
-    temperature: view.temperature,
-    maxTokens: view.maxTokens,
+    temperature: structured ? Math.min(view.temperature, 0.3) : view.temperature,
+    maxTokens: structured ? STRUCTURED_MAX_TOKENS : view.maxTokens + REASONING_HEADROOM,
   };
 }
 
