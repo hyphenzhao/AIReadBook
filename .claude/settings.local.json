@@ -6,7 +6,8 @@
       "Bash(nft list *)",
       "Bash(dpkg -l)",
       "Bash(npx next *)",
-      "Bash(fuser -k 3000/tcp)"
+      "Bash(fuser -k 3000/tcp)",
+      "mcp__codegraph__codegraph_status"
     ]
   }
 }

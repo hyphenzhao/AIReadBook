@@ -59,7 +59,9 @@ npx tsc --noEmit -p tsconfig.typecheck.json
 npx vitest run
 
 log "Building into .next-build"
-rm -rf .next-build
+# tsconfig.json includes the live build's generated route types. They are not
+# used at runtime, and they break the type check once a route is deleted.
+rm -rf .next-build .next/types
 NEXT_DIST_DIR=.next-build npx next build
 
 log "Smoke-testing the new build on :$SMOKE_PORT"
