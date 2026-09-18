@@ -50,6 +50,9 @@ async function request(method: string, path: string, { body, expectAuth = true }
   throw new ApiError(message, res.status);
 }
 
+/** For sibling API modules (api-knowledge.ts), so they share the error handling above. */
+export const apiRequest = request;
+
 const get = (path: string, options?: RequestOptions) => request("GET", path, options);
 const post = (path: string, body: unknown, options?: RequestOptions) => request("POST", path, { ...options, body });
 const patch = (path: string, body: unknown) => request("PATCH", path, { body });

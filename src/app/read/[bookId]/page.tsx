@@ -26,7 +26,7 @@ export default function ReadPage() {
   const libraryReady = useLibraryStore((s) => s.ready);
   const preferences = useUserStore((s) => s.preferences);
   const {
-    setBook, setChapters, setChapter, currentChapter, chapters, currentBook, passageJump, clearPassageJump,
+    setBook, setChapters, setChapter, currentChapter, chapters, currentBook, passageJump, clearPassageJump, jumpToPassage,
   } = useReadingStore();
   const { getBookAnnotations } = useAnnotationStore();
   const [content, setContent] = useState("");
@@ -142,6 +142,17 @@ export default function ReadPage() {
       document.querySelector('[data-cited="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
   }, [passageJump, chapters, currentChapter, content, setChapter, clearPassageJump]);
+
+  // Deep link from a knowledge card or a graph node: /read/12?chapter=34&from=100&to=260.
+  useEffect(() => {
+    if (currentBook?.id !== bookId || chapters.length === 0) return;
+    const query = new URLSearchParams(window.location.search);
+    const chapterId = query.get("chapter");
+    if (!chapterId) return;
+    jumpToPassage({ chapterId, charStart: Number(query.get("from")) || 0, charEnd: Number(query.get("to")) || 0 });
+    // Drop the parameters so a reload does not jump again.
+    router.replace(`/read/${bookId}`, { scroll: false });
+  }, [currentBook?.id, bookId, chapters.length, jumpToPassage, router]);
 
   useEffect(() => {
     if (!flash) return;

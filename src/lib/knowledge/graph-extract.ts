@@ -205,7 +205,8 @@ export async function extractChapterGraph(chapterId: number, ctx: JobContext) {
   }
 
   await pruneGraph(userId, scope);
-  await ctx.progress(`done: ${nodeIdByName.size} nodes, ${edgeCount} relations`, 100);
+  // nodeIdByName also holds aliases, so count the distinct nodes behind it.
+  await ctx.progress(`done: ${new Set(nodeIdByName.values()).size} nodes, ${edgeCount} relations`, 100);
 }
 
 /** Drops edges and nodes that no passage supports any more, and re-weights the rest. */

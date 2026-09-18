@@ -32,6 +32,8 @@
     "bcryptjs": "^3.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cytoscape": "^3.34.3",
+    "cytoscape-fcose": "^2.2.0",
     "d3": "^7.9.0",
     "jszip": "^3.10.1",
     "lucide-react": "^0.460.0",
@@ -50,6 +52,7 @@
   "devDependencies": {
     "@tailwindcss/typography": "^0.5.20",
     "@types/bcryptjs": "^2.4.6",
+    "@types/cytoscape": "^3.21.9",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { CitationMarkdown } from "@/components/ai/CitationMarkdown";
 import { SourcesStrip, sourcesOf } from "@/components/ai/SourcesStrip";
 import { SummaryView } from "@/components/ai/SummaryView";
+import { KnowledgeActions } from "@/components/ai/KnowledgeActions";
 import { useChatStore, type ChatSession } from "@/stores/chat-store";
 import { useUserStore } from "@/stores/user-store";
 import type { SourceRef } from "@/lib/api-client-v2";
@@ -335,6 +336,11 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
       </div>
 
       <div className="border-t border-[var(--border)] p-2">
+        {context && (
+          <div className="mb-2">
+            <KnowledgeActions bookId={context.bookId} chapterId={context.unitId} />
+          </div>
+        )}
         <div className="mb-1.5 flex items-center gap-2 text-[11px] text-[var(--muted-foreground)]">
           <BookOpenText className="h-3 w-3 shrink-0" />
           <span className="min-w-0 truncate">{context?.unitLabel ?? "未选择章节"}</span>

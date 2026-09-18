@@ -60,12 +60,12 @@ export function UserMenu() {
             发现书籍
           </Link>
           <Link
-            href="/mind-maps"
+            href="/graph"
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--accent)]"
           >
             <Network className="h-4 w-4" />
-            思维导图
+            知识图谱
           </Link>
           <Link
             href="/review"
