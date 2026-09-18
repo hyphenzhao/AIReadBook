@@ -39,7 +39,8 @@ export default function LoginPage() {
       const { useAnnotationStore } = await import("@/stores/annotation-store");
       await useLibraryStore.getState().load(user.id);
       await useAnnotationStore.getState().load(user.id);
-      router.push("/library");
+      const next = new URLSearchParams(window.location.search).get("next");
+      router.push(next?.startsWith("/") && !next.startsWith("//") ? next : "/library");
     } catch {
       setError("登录失败，请检查邮箱和密码");
     } finally {

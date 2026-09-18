@@ -34,10 +34,16 @@ export async function apiLogin(email: string, password: string) {
 export async function apiRegister(email: string, password: string, name: string) {
   return post("/api/v2/auth", { action: "register", email, password, name });
 }
+export async function apiGetSession() {
+  return get("/api/v2/auth");
+}
+export async function apiLogout() {
+  return post("/api/v2/auth", { action: "logout" });
+}
 
 // --- Books ---
 export async function apiGetBooks() {
-  return get(`/api/v2/books?userId=${currentUserId}`);
+  return get("/api/v2/books");
 }
 export async function apiCreateBook(data: any) {
   return post("/api/v2/books", { userId: currentUserId, ...data });
@@ -45,16 +51,27 @@ export async function apiCreateBook(data: any) {
 export async function apiDeleteBook(bookId: string) {
   return del(`/api/v2/books/${bookId}`);
 }
+export async function apiUpdateBook(bookId: string, data: any) {
+  return patch(`/api/v2/books/${bookId}`, data);
+}
 
 // --- Annotations ---
 export async function apiGetAnnotations() {
-  return get(`/api/v2/annotations?userId=${currentUserId}`);
+  return get("/api/v2/annotations");
 }
 export async function apiCreateAnnotation(data: any) {
   return post("/api/v2/annotations", { userId: currentUserId, ...data });
 }
 export async function apiUpdateAnnotation(id: string, data: any) {
   return patch("/api/v2/annotations", { id, ...data });
+}
+export async function apiDeleteAnnotation(id: string) {
+  const res = await fetch("/api/v2/annotations", {
+    method: "DELETE",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ id }),
+  });
+  if (!res.ok) throw new Error(await res.text());
 }
 
 // --- Chat ---
@@ -73,8 +90,8 @@ export async function apiAddChatMessage(sessionId: string, role: string, content
 
 // --- User Settings ---
 export async function apiGetUserSettings() {
-  return get(`/api/v2/user/settings?userId=${currentUserId}`);
+  return get("/api/v2/user/settings");
 }
 export async function apiSaveUserSettings(aiSettings: any) {
-  return patch("/api/v2/user/settings", { userId: currentUserId, aiSettings });
+  return patch("/api/v2/user/settings", { aiSettings });
 }

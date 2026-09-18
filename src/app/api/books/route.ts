@@ -1,9 +1,13 @@
 import { uuid } from "@/lib/utils";
 import { NextRequest, NextResponse } from "next/server";
 import { parseEpub } from "@/lib/epub/parser";
+import { getSessionUserId } from "@/lib/auth-session";
 
 export async function POST(request: NextRequest) {
   try {
+    if (!(await getSessionUserId())) {
+      return NextResponse.json({ error: "请先登录" }, { status: 401 });
+    }
     const formData = await request.formData();
     const file = formData.get("file") as File | null;
 
@@ -11,7 +15,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "No file provided" }, { status: 400 });
     }
 
-    if (!file.name.endsWith(".epub")) {
+    if (!file.name.toLowerCase().endsWith(".epub")) {
       return NextResponse.json({ error: "Only EPUB files are supported" }, { status: 400 });
     }
 
@@ -22,9 +26,16 @@ export async function POST(request: NextRequest) {
     // Parse the EPUB file
     const buffer = await file.arrayBuffer();
     const epubData = await parseEpub(buffer);
+    const totalCharacters = epubData.chapters.reduce((sum, chapter) => sum + chapter.plainText.length, 0);
+    if (!epubData.chapters.length) {
+      return NextResponse.json({ error: "EPUB 中没有可读取的正文内容" }, { status: 422 });
+    }
+    if (epubData.chapters.length > 2000 || totalCharacters > 50_000_000) {
+      return NextResponse.json({ error: "EPUB 解压后的内容过大" }, { status: 413 });
+    }
 
-    // For MVP: store book data in the response directly
-    // In production, this would save to Supabase and trigger AI processing
+    // Parsing is isolated from persistence so the client can show parse errors
+    // before the normalized book and chapters are written through /api/v2/books.
     const book = {
       id: uuid(),
       title: epubData.metadata.title || file.name.replace(".epub", ""),
@@ -55,10 +66,4 @@ export async function POST(request: NextRequest) {
       { status: 500 },
     );
   }
-}
-
-export async function GET() {
-  // In production, fetch from Supabase
-  // For MVP, return empty array
-  return NextResponse.json({ books: [] });
 }

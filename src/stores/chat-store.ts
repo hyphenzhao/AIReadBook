@@ -31,18 +31,11 @@ export const useChatStore = create<ChatState>()((set, get) => ({
   },
 
   addSession: async (input) => {
-    try {
-      const result = await api.apiCreateChatSession(input);
-      const now = new Date().toISOString();
-      const session: ChatSession = { ...input, id: result.id, createdAt: now, updatedAt: now };
-      set(s => ({ sessions: [session, ...s.sessions] }));
-      return result.id;
-    } catch {
-      const id = Math.random().toString(36);
-      const now = new Date().toISOString();
-      set(s => ({ sessions: [{ ...input, id, createdAt: now, updatedAt: now }, ...s.sessions] }));
-      return id;
-    }
+    const result = await api.apiCreateChatSession(input);
+    const now = new Date().toISOString();
+    const session: ChatSession = { ...input, id: result.id, createdAt: now, updatedAt: now };
+    set(s => ({ sessions: [session, ...s.sessions] }));
+    return result.id;
   },
 
   deleteSession: async (id) => {
@@ -63,12 +56,18 @@ export const useChatStore = create<ChatState>()((set, get) => ({
     api.apiAddChatMessage(sessionId, role, content).catch(() => {});
   },
 
-  updateSessionMessages: (sessionId, messages) =>
+  updateSessionMessages: (sessionId, messages) => {
     set(s => ({
       sessions: s.sessions.map(session =>
         session.id === sessionId ? { ...session, messages, updatedAt: new Date().toISOString() } : session
       ),
-    })),
+    }));
+    // Sync last message to MySQL
+    const lastMsg = messages[messages.length - 1];
+    if (lastMsg && lastMsg.id !== "welcome") {
+      api.apiAddChatMessage(sessionId, lastMsg.role, lastMsg.content).catch(() => {});
+    }
+  },
 
   getBookSessions: (bookId) =>
     get().sessions.filter(s => s.bookId === bookId).sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),

@@ -21,7 +21,7 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: "/icons/icon.svg",
-    apple: "/icons/icon-192.png",
+    apple: "/icons/icon.svg",
   },
 };
 
@@ -33,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+        <link rel="apple-touch-icon" href="/icons/icon.svg" />
       </head>
       <body className="antialiased">
         <ToastProvider>

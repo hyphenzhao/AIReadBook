@@ -7,7 +7,7 @@
  */
 import { prisma } from "@/lib/prisma";
 
-interface RetrievedPassage {
+export interface RetrievedPassage {
   chapterTitle: string;
   chapterIndex: number;
   content: string;
@@ -26,40 +26,66 @@ export async function retrieveRelevantPassages(
   const book = await prisma.book.findUnique({ where: { id: bookId } });
   if (!book) return { passages: [], bookTitle: "" };
 
-  // Stage 1: FULLTEXT search across all chapters
-  const chapters = await prisma.$queryRawUnsafe<Array<{
+  const searchTerms = extractSearchTerms(query);
+  if (searchTerms.length === 0) {
+    return { passages: [], bookTitle: book.title };
+  }
+
+  // Stage 1: FULLTEXT search across all chapters. MySQL's default parser often
+  // cannot segment Chinese sentences, so use cleaned terms and always retain a
+  // safe LIKE-based fallback below.
+  let chapters: Array<{
     id: number; index: number; title: string; content: string; relevance: number;
-  }>>(
-    `SELECT id, \`index\`, title, content,
-            MATCH(title, content) AGAINST(?) AS relevance
-     FROM chapters
-     WHERE book_id = ? AND MATCH(title, content) AGAINST(? IN BOOLEAN MODE)
-     ORDER BY relevance DESC
-     LIMIT ?`,
-    query, bookId, query, maxPassages * 2,
-  );
+  }> = [];
+  try {
+    const fulltextQuery = searchTerms.join(" ");
+    chapters = await prisma.$queryRawUnsafe<Array<{
+      id: number; index: number; title: string; content: string; relevance: number;
+    }>>(
+      `SELECT id, \`index\`, title, content,
+              MATCH(title, content) AGAINST(?) AS relevance
+       FROM chapters
+       WHERE book_id = ? AND MATCH(title, content) AGAINST(? IN BOOLEAN MODE)
+       ORDER BY relevance DESC
+       LIMIT ?`,
+      fulltextQuery, bookId, fulltextQuery, maxPassages * 2,
+    );
+  } catch (error) {
+    console.warn("[retriever] FULLTEXT unavailable, using contains search", error);
+  }
 
   if (chapters.length === 0) {
-    // Fallback: LIKE search
-    const fallback = await prisma.$queryRawUnsafe<Array<{
-      id: number; index: number; title: string; content: string;
-    }>>(
-      `SELECT id, \`index\`, title, content FROM chapters
-       WHERE book_id = ? AND (title LIKE ? OR content LIKE ?)
-       LIMIT ?`,
-      bookId, `%${query}%`, `%${query}%`, maxPassages,
-    );
+    // Prisma parameterizes every term. This also works for Chinese text where
+    // FULLTEXT has no ngram parser configured.
+    const fallback = await prisma.chapter.findMany({
+      where: {
+        bookId,
+        OR: searchTerms.flatMap((term) => [
+          { title: { contains: term } },
+          { content: { contains: term } },
+        ]),
+      },
+      orderBy: { index: "asc" },
+      take: maxPassages * 4,
+      select: { id: true, index: true, title: true, content: true },
+    });
     if (fallback.length === 0) {
       return { passages: [], bookTitle: book.title };
     }
     return {
       bookTitle: book.title,
-      passages: fallback.map((ch) => ({
-        chapterTitle: ch.title || `第${ch.index + 1}章`,
-        chapterIndex: ch.index,
-        content: extractRelevantSnippet(ch.content, query, 800),
-        relevance: 0.5,
-      })),
+      passages: fallback
+        .map((ch) => {
+          const score = scoreContent(`${ch.title || ""}\n${ch.content}`, searchTerms);
+          return {
+            chapterTitle: ch.title || `第${ch.index + 1}章`,
+            chapterIndex: ch.index,
+            content: extractRelevantSnippet(ch.content, searchTerms, 1000),
+            relevance: score,
+          };
+        })
+        .sort((a, b) => b.relevance - a.relevance)
+        .slice(0, maxPassages),
     };
   }
 
@@ -67,7 +93,7 @@ export async function retrieveRelevantPassages(
   const passages: RetrievedPassage[] = chapters.map((ch) => ({
     chapterTitle: ch.title || `第${ch.index + 1}章`,
     chapterIndex: ch.index,
-    content: extractRelevantSnippet(ch.content, query, 1000),
+    content: extractRelevantSnippet(ch.content, searchTerms, 1000),
     relevance: Math.min(ch.relevance / 10, 1), // Normalize MySQL relevance scores
   }));
 
@@ -83,8 +109,7 @@ export async function retrieveRelevantPassages(
 /**
  * Extract a relevant snippet from chapter content, centered around keyword matches.
  */
-function extractRelevantSnippet(content: string, query: string, maxLen: number): string {
-  const keywords = query.split(/\s+/).filter((k) => k.length > 0);
+function extractRelevantSnippet(content: string, keywords: string[], maxLen: number): string {
   if (keywords.length === 0) return content.slice(0, maxLen);
 
   // Find first occurrence of any keyword
@@ -108,6 +133,47 @@ function extractRelevantSnippet(content: string, query: string, maxLen: number):
   if (end < content.length) snippet = snippet + "...";
 
   return snippet;
+}
+
+function extractSearchTerms(query: string): string[] {
+  const cleaned = query
+    .toLowerCase()
+    .replace(
+      /(请|帮我|能否|可以|作者|书中|文中|本书|认为|觉得|为什么|怎么样|如何|什么是|是什么|有哪些|是否|一下|解释|分析|介绍|告诉我|详细|具体|相关|内容|观点|问题|重要|核心)/g,
+      " ",
+    )
+    .replace(/[，。！？；：、“”‘’（）()《》【】\[\],.!?;:'"/\\|_-]+/g, " ");
+
+  const terms = cleaned
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter((term) => term.length >= 2)
+    .flatMap((term) => {
+      if (term.length <= 12) return [term];
+      // Long unsegmented Chinese phrases are more useful as overlapping
+      // four-character probes than as a single impossible LIKE expression.
+      const pieces: string[] = [];
+      for (let index = 0; index < term.length; index += 3) {
+        const piece = term.slice(index, index + 4);
+        if (piece.length >= 2) pieces.push(piece);
+      }
+      return pieces;
+    });
+
+  return [...new Set(terms)].slice(0, 8);
+}
+
+function scoreContent(content: string, terms: string[]): number {
+  const normalized = content.toLowerCase();
+  let matches = 0;
+  for (const term of terms) {
+    let position = normalized.indexOf(term);
+    while (position >= 0 && matches < 20) {
+      matches += 1;
+      position = normalized.indexOf(term, position + term.length);
+    }
+  }
+  return Math.min(1, 0.35 + matches * 0.08);
 }
 
 /**

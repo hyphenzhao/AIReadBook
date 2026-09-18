@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Network, Plus } from "lucide-react";
+import { ArrowLeft, Network } from "lucide-react";
 import { useKnowledgeStore } from "@/stores/knowledge-store";
 import { useLibraryStore } from "@/stores/library-store";
 import { MindMapViewer } from "@/components/mind-map/MindMapViewer";
@@ -14,6 +14,10 @@ export default function MindMapsPage() {
   const [selectedBookId, setSelectedBookId] = useState<string | null>(
     books[0]?.id ?? null,
   );
+
+  useEffect(() => {
+    if (!selectedBookId && books[0]) setSelectedBookId(books[0].id);
+  }, [books, selectedBookId]);
 
   const bookMindMaps = selectedBookId ? getBookMindMaps(selectedBookId) : [];
   const selectedBook = books.find((b) => b.id === selectedBookId);

@@ -15,6 +15,7 @@ import { useKnowledgeStore } from "@/stores/knowledge-store";
 import { useChatStore, type ChatSession } from "@/stores/chat-store";
 import { Button } from "@/components/ui/button";
 import type { ChatMode } from "@/types";
+import type { MindMapNode } from "@/stores/knowledge-store";
 
 const MODES: { id: ChatMode; label: string; icon: typeof Sparkles; desc: string }[] = [
   { id: "companion", label: "伴读", icon: Sparkles, desc: "随时解答疑问" },
@@ -29,6 +30,35 @@ const THINKING_PHASES = [
   { text: "组织回答...", color: "text-green-500" },
 ];
 
+function parseJsonReply(content: string): unknown {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1];
+  const source = (fenced || content).trim();
+  try {
+    return JSON.parse(source);
+  } catch {
+    const arrayStart = source.indexOf("[");
+    const arrayEnd = source.lastIndexOf("]");
+    const objectStart = source.indexOf("{");
+    const objectEnd = source.lastIndexOf("}");
+    try {
+      if (arrayStart >= 0 && arrayEnd > arrayStart) return JSON.parse(source.slice(arrayStart, arrayEnd + 1));
+      if (objectStart >= 0 && objectEnd > objectStart) return JSON.parse(source.slice(objectStart, objectEnd + 1));
+    } catch {}
+    return null;
+  }
+}
+
+function isMindMapNode(value: unknown): value is MindMapNode {
+  if (!value || typeof value !== "object") return false;
+  const node = value as { id?: unknown; label?: unknown; children?: unknown };
+  return (
+    typeof node.id === "string" &&
+    typeof node.label === "string" &&
+    (node.children === undefined ||
+      (Array.isArray(node.children) && node.children.every(isMindMapNode)))
+  );
+}
+
 export function AIPanel() {
   const { aiMode, setAiMode, currentBook, currentChapter, pendingAskAI, clearAskAI } =
     useReadingStore();
@@ -41,6 +71,7 @@ export function AIPanel() {
   const [view, setView] = useState<"list" | "chat">("chat");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [thinkingPhase, setThinkingPhase] = useState(0);
+  const [sessionError, setSessionError] = useState("");
   const bottomRef = useRef<HTMLDivElement>(null);
   const thinkingTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -56,11 +87,14 @@ export function AIPanel() {
     bookId: currentBook?.id,
     bookTitle: currentBook?.title,
     chapterId: currentChapter?.id,
+    chapterIndex: currentChapter?.index,
     mode: aiMode,
     apiKey: aiSettings.apiKey,
     baseUrl: aiSettings.baseUrl,
     model: aiSettings.model,
-  }), [currentBook?.id, currentBook?.title, currentChapter?.id, aiMode, aiSettings.apiKey, aiSettings.baseUrl, aiSettings.model]);
+    temperature: aiSettings.temperature,
+    maxTokens: aiSettings.maxTokens,
+  }), [currentBook?.id, currentBook?.title, currentChapter?.id, currentChapter?.index, aiMode, aiSettings.apiKey, aiSettings.baseUrl, aiSettings.model, aiSettings.temperature, aiSettings.maxTokens]);
 
   // --- Chat session management ---
   const { messages, append, isLoading, stop, error, setMessages } = useChat({
@@ -101,7 +135,7 @@ export function AIPanel() {
   // --- Persist messages on change (debounced to avoid loops) ---
   const persistTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (!activeSessionId || messages.length <= 1) return;
+    if (!activeSessionId || messages.length <= 1 || isLoading) return;
     const lastMsg = messages[messages.length - 1];
     if (!lastMsg || lastMsg.id === "welcome") return;
     if (persistTimer.current) clearTimeout(persistTimer.current);
@@ -117,18 +151,20 @@ export function AIPanel() {
       );
     }, 500);
     return () => { if (persistTimer.current) clearTimeout(persistTimer.current); };
-  }, [messages, activeSessionId]);
+  }, [messages, activeSessionId, isLoading]);
 
   // --- "Ask AI" from selection ---
   useEffect(() => {
     if (pendingAskAI) {
-      setView("chat");
-      // Ensure we have a session
-      ensureSession();
-      setTimeout(() => {
-        append({ role: "user", content: `请帮我分析这段话："${pendingAskAI}"` });
+      const question = `请帮我分析这段话："${pendingAskAI}"`;
+      void (async () => {
+        setView("chat");
+        const sessionId = await ensureSession();
+        if (!sessionId) return;
+        useChatStore.getState().addMessage(sessionId, "user", question);
+        append({ role: "user", content: question });
         clearAskAI();
-      }, 200);
+      })();
     }
   }, [pendingAskAI]);
 
@@ -138,19 +174,26 @@ export function AIPanel() {
   }, [messages, thinkingPhase]);
 
   // --- Session helpers ---
-  async function ensureSession() {
-    if (activeSessionId) return;
-    if (!currentBook) return;
+  async function ensureSession(): Promise<string | null> {
+    if (activeSessionId) return activeSessionId;
+    if (!currentBook) return null;
     const title = `${currentChapter?.title || `第${(currentChapter?.index ?? 0) + 1}章`} · ${MODES.find((m) => m.id === aiMode)?.label || "伴读"}`;
-    const id = await addSession({
-      bookId: currentBook.id,
-      chapterId: currentChapter?.id || null,
-      chapterTitle: currentChapter?.title || null,
-      mode: aiMode,
-      title,
-      messages: [],
-    });
-    setActiveSessionId(id);
+    try {
+      const id = await addSession({
+        bookId: currentBook.id,
+        chapterId: currentChapter?.id || null,
+        chapterTitle: currentChapter?.title || null,
+        mode: aiMode,
+        title,
+        messages: [],
+      });
+      setActiveSessionId(id);
+      setSessionError("");
+      return id;
+    } catch {
+      setSessionError("无法创建对话，请检查登录状态和服务器连接");
+      return null;
+    }
   }
 
   async function startNewSession() {
@@ -181,17 +224,20 @@ export function AIPanel() {
     setView("chat");
   }
 
-  function handleSend() {
+  async function handleSend() {
     if (!input.trim() || isLoading) return;
-    ensureSession();
-    append({ role: "user", content: input });
+    const content = input.trim();
+    const sessionId = await ensureSession();
+    if (!sessionId) return;
+    useChatStore.getState().addMessage(sessionId, "user", content);
+    append({ role: "user", content });
     setInput("");
   }
 
   function handleKeyDown(e: React.KeyboardEvent) {
     if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
-      handleSend();
+      void handleSend();
     }
   }
 
@@ -199,8 +245,36 @@ export function AIPanel() {
   function handleExtractCards() {
     const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
     if (!lastAssistant || !currentBook) return;
-    // Parse structured content from the assistant's reply
     const content = lastAssistant.content;
+    const parsed = parseJsonReply(content);
+    if (Array.isArray(parsed)) {
+      const cards = parsed.flatMap((value) => {
+        if (!value || typeof value !== "object") return [];
+        const card = value as Record<string, unknown>;
+        const cardType = String(card.card_type || card.cardType || "concept");
+        if (!["concept", "argument", "evidence", "example", "question"].includes(cardType)) return [];
+        if (!String(card.title || "").trim() || !String(card.content || "").trim()) return [];
+        const difficulty = ["basic", "intermediate", "advanced"].includes(String(card.difficulty))
+          ? String(card.difficulty) as "basic" | "intermediate" | "advanced"
+          : "intermediate";
+        return [{
+          bookId: currentBook.id,
+          chapterId: currentChapter?.id || null,
+          cardType: cardType as "concept" | "argument" | "evidence" | "example" | "question",
+          title: String(card.title).trim(),
+          content: String(card.content).trim(),
+          sourceChunks: [] as string[],
+          tags: Array.isArray(card.tags) ? card.tags.map(String).slice(0, 10) : [],
+          difficulty,
+        }];
+      });
+      if (cards.length) {
+        addCards(cards);
+        return;
+      }
+    }
+
+    // Backward-compatible parsing for prose responses.
     const cardMatches = content.match(/\*\*([^*]+)\*\*[：:]\s*(.+?)(?=\n\*\*|$)/gs);
     if (cardMatches) {
       const cards = cardMatches.map((match) => {
@@ -220,18 +294,35 @@ export function AIPanel() {
     }
   }
 
+  function handleSaveMindMap() {
+    const lastAssistant = [...messages].reverse().find((m) => m.role === "assistant");
+    if (!lastAssistant || !currentBook) return;
+    const parsed = parseJsonReply(lastAssistant.content);
+    if (!isMindMapNode(parsed)) return;
+    addMindMap({
+      bookId: currentBook.id,
+      chapterId: currentChapter?.id || null,
+      title: currentChapter?.title || parsed.label,
+      data: parsed,
+      isAiGenerated: true,
+    });
+  }
+
   function handleGenerateMindMap() {
     if (!currentBook || !currentChapter) return;
-    append({
-      role: "user",
-      content: `请为本章内容生成一个思维导图，以树形 JSON 格式输出。根节点为章节标题，子节点为主要概念和论点，孙节点为支撑细节。输出纯 JSON，不要包含其他文本。格式：{"id":"root","label":"章节标题","children":[{"id":"1","label":"概念1","children":[...]}]}`,
-    });
+    const content = `请为本章内容生成一个思维导图，以树形 JSON 格式输出。根节点为章节标题，子节点为主要概念和论点，孙节点为支撑细节。输出纯 JSON，不要包含其他文本。格式：{"id":"root","label":"章节标题","children":[{"id":"1","label":"概念1","children":[...]}]}`;
+    void (async () => {
+      const sessionId = await ensureSession();
+      if (!sessionId) return;
+      useChatStore.getState().addMessage(sessionId, "user", content);
+      append({ role: "user", content });
+    })();
   }
 
   // --- Session list view ---
   if (view === "list") {
     return (
-      <div className="flex h-full flex-col bg-[var(--background)]">
+      <div className="flex h-full flex-col bg-[var(--background)] pb-14 md:pb-0">
         <div className="flex items-center justify-between border-b border-[var(--border)] px-3 py-2">
           <h3 className="text-sm font-medium">对话记录</h3>
           <button
@@ -293,7 +384,7 @@ export function AIPanel() {
 
   // --- Chat view ---
   return (
-    <div className="flex h-full flex-col bg-[var(--background)]">
+    <div className="flex h-full flex-col bg-[var(--background)] pb-14 md:pb-0">
       {/* Mode Switcher + session nav */}
       <div className="border-b border-[var(--border)] px-3 py-2">
         <div className="flex items-center gap-1">
@@ -341,6 +432,11 @@ export function AIPanel() {
           {error.message || "AI 服务出错，请检查 API Key 和网络连接"}
         </div>
       )}
+      {sessionError && (
+        <div className="mx-3 mt-2 rounded-lg border border-red-200 bg-red-50 p-2.5 text-xs text-red-700 dark:border-red-800 dark:bg-red-950/30 dark:text-red-300">
+          {sessionError}
+        </div>
+      )}
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-3 py-4">
@@ -384,6 +480,14 @@ export function AIPanel() {
                       >
                         生成思维导图
                       </button>
+                      {isMindMapNode(parseJsonReply(msg.content)) && (
+                        <button
+                          onClick={handleSaveMindMap}
+                          className="rounded bg-[var(--primary)]/10 px-2 py-0.5 text-xs text-[var(--primary)] hover:bg-[var(--primary)]/20"
+                        >
+                          保存思维导图
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -421,7 +525,14 @@ export function AIPanel() {
       </div>
 
       {/* Quick Actions */}
-      <div className="flex flex-wrap gap-1 border-t border-[var(--border)] px-3 py-2">
+      <div className="border-t border-[var(--border)] px-3 pt-2 text-[11px] text-[var(--muted-foreground)]">
+        阅读上下文：
+        <span className="ml-1 font-medium text-[var(--foreground)]">
+          {currentChapter?.title ||
+            (currentChapter ? `第${currentChapter.index + 1}章` : "未选择章节")}
+        </span>
+      </div>
+      <div className="flex flex-wrap gap-1 px-3 py-2">
         {[
           { label: "总结本章", prompt: "请总结本章的核心内容，提供三个层次的摘要：一句话概述、段落式摘要、关键要点。" },
           { label: "提取关键点", prompt: "请提取本章的关键概念和主要论点，以结构化方式列出。" },
@@ -430,9 +541,11 @@ export function AIPanel() {
         ].map((action) => (
           <button
             key={action.label}
-            onClick={() => {
+            onClick={async () => {
               if (!isLoading) {
-                ensureSession();
+                const sessionId = await ensureSession();
+                if (!sessionId) return;
+                useChatStore.getState().addMessage(sessionId, "user", action.prompt);
                 append({ role: "user", content: action.prompt });
               }
             }}
@@ -466,7 +579,7 @@ export function AIPanel() {
               <StopCircle className="h-4 w-4" />
             </Button>
           ) : (
-            <Button size="icon" onClick={handleSend} disabled={!input.trim()} className="shrink-0">
+            <Button size="icon" onClick={() => void handleSend()} disabled={!input.trim()} className="shrink-0">
               <Send className="h-4 w-4" />
             </Button>
           )}

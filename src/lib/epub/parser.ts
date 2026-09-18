@@ -1,7 +1,7 @@
 /**
  * EPUB Parser — extracts metadata, TOC, and chapter content from EPUB files.
  *
- * For MVP, this uses a lightweight approach:
+ * This uses a lightweight, server-side parsing approach:
  * 1. Unzip the EPUB (it's just a ZIP file)
  * 2. Parse container.xml, .opf, and .ncx/toc files
  * 3. Extract chapter HTML content

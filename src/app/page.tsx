@@ -5,7 +5,7 @@ const features = [
   {
     icon: BookOpen,
     title: "智能阅读",
-    desc: "导入 EPUB 电子书，AI 自动解析、索引、构建知识图谱，为深度学习做好准备。",
+    desc: "导入 EPUB 电子书，自动解析章节并建立全文检索上下文，为深度阅读做好准备。",
   },
   {
     icon: MessageCircle,
@@ -15,12 +15,12 @@ const features = [
   {
     icon: Brain,
     title: "知识吸收",
-    desc: "AI 自动生成思维导图、知识卡片和间隔复习卡片，让知识真正内化。",
+    desc: "从 AI 回答保存思维导图和知识卡片，再加入间隔复习，让知识逐步内化。",
   },
   {
     icon: Search,
     title: "全书检索",
-    desc: "跨章节语义搜索，AI 理解全书内容，任何问题都能找到关联的上下文。",
+    desc: "跨章节检索相关段落，为 AI 回答提供可追溯的书内上下文。",
   },
 ];
 

@@ -62,14 +62,20 @@ export function ReadingLayout({ leftPanel, centerPanel, rightPanel }: ReadingLay
 
   const leftW = leftPanelOpen ? `${leftPanelWidth * 100}%` : "0px";
   const rightW = rightPanelOpen && aiPanelPosition === "right" ? `${rightPanelWidth * 100}%` : "0px";
-  const bottomH = rightPanelOpen && aiPanelPosition === "bottom" ? `${aiPanelSize}px` : "0px";
+  const bottomH =
+    rightPanelOpen && aiPanelPosition === "bottom"
+      ? `min(${aiPanelSize}px, calc(100dvh - 7rem))`
+      : "0px";
 
   // Right position: classic 3-column
   if (aiPanelPosition === "right") {
     return (
-      <div className="flex h-screen overflow-hidden bg-[var(--background)]">
+      <div className="relative flex h-screen overflow-hidden bg-[var(--background)]">
         {/* Left Panel */}
-        <div className="relative shrink-0 overflow-hidden border-r border-[var(--border)] transition-[width] duration-200" style={{ width: leftW }}>
+        <div
+          className={`relative shrink-0 overflow-hidden border-r border-[var(--border)] transition-[width] duration-200 max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:bg-[var(--background)] max-md:shadow-xl ${leftPanelOpen ? "max-md:!w-[min(85vw,20rem)]" : ""}`}
+          style={{ width: leftW }}
+        >
           {leftPanelOpen && <div className="h-full w-full overflow-y-auto">{leftPanel}</div>}
           {/* Left drag handle */}
           {leftPanelOpen && (
@@ -85,7 +91,10 @@ export function ReadingLayout({ leftPanel, centerPanel, rightPanel }: ReadingLay
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{centerPanel}</div>
 
         {/* Right Panel (AI) */}
-        <div className="relative shrink-0 overflow-hidden border-l border-[var(--border)] transition-[width] duration-200" style={{ width: rightW }}>
+        <div
+          className={`relative shrink-0 overflow-hidden border-l border-[var(--border)] transition-[width] duration-200 max-md:absolute max-md:inset-y-0 max-md:right-0 max-md:z-30 max-md:bg-[var(--background)] max-md:shadow-xl ${rightPanelOpen ? "max-md:!w-[min(90vw,24rem)]" : ""}`}
+          style={{ width: rightW }}
+        >
           {rightPanelOpen && <div className="h-full w-full overflow-hidden">{rightPanel}</div>}
           {rightPanelOpen && (
             <div
@@ -103,8 +112,11 @@ export function ReadingLayout({ leftPanel, centerPanel, rightPanel }: ReadingLay
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-[var(--background)]">
       {/* Top area: left panel + center */}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="shrink-0 overflow-hidden border-r border-[var(--border)] transition-[width] duration-200" style={{ width: leftW }}>
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        <div
+          className={`shrink-0 overflow-hidden border-r border-[var(--border)] transition-[width] duration-200 max-md:absolute max-md:inset-y-0 max-md:left-0 max-md:z-30 max-md:bg-[var(--background)] max-md:shadow-xl ${leftPanelOpen ? "max-md:!w-[min(85vw,20rem)]" : ""}`}
+          style={{ width: leftW }}
+        >
           {leftPanelOpen && <div className="h-full w-full overflow-y-auto">{leftPanel}</div>}
         </div>
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{centerPanel}</div>

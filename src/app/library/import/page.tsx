@@ -17,7 +17,6 @@ export default function ImportPage() {
   const [fileName, setFileName] = useState("");
   const [done, setDone] = useState(false);
   const [error, setError] = useState("");
-  const [uploadedId, setUploadedId] = useState("");
 
   const handleFile = useCallback(
     async (file: File) => {
@@ -33,16 +32,15 @@ export default function ImportPage() {
       try {
         const result = await uploadEpub(file);
 
-        // Save to local library store
-        addBook(result);
+        // Persist first; the database ID is the only valid reader route.
+        const bookId = await addBook(result);
 
-        setUploadedId(result.id);
         setUploading(false);
         setDone(true);
 
         // Navigate to the book after a short delay
         setTimeout(() => {
-          router.push(`/read/${result.id}`);
+          router.push(`/read/${bookId}`);
         }, 1500);
       } catch (err) {
         setUploading(false);

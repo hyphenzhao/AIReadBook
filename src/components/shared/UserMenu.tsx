@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Settings, Brain, BookOpen, LogOut, Search, Network } from "lucide-react";
+import { User, Settings, Brain, LogOut, Search, Network } from "lucide-react";
 import { useUserStore } from "@/stores/user-store";
 
 export function UserMenu() {
@@ -87,8 +87,8 @@ export function UserMenu() {
             </Link>
             {isLoggedIn ? (
               <button
-                onClick={() => {
-                  logout();
+                onClick={async () => {
+                  await logout();
                   setOpen(false);
                   router.push("/login");
                 }}

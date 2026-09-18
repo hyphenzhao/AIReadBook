@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -34,14 +34,22 @@ export default function SettingsPage() {
   const [profileLoading, setProfileLoading] = useState(false);
 
   async function handleSaveProfile() {
+    if (!displayName.trim() || !currentUser) {
+      setProfileMsg("显示名称不能为空");
+      return;
+    }
     setProfileLoading(true); setProfileMsg("");
     try {
       const res = await fetch("/api/v2/user/settings", {
         method: "PATCH", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: currentUser?.id, name: displayName }),
+        body: JSON.stringify({ name: displayName }),
       });
       const data = await res.json();
-      if (data.ok) { setProfileMsg("已保存"); setTimeout(() => setProfileMsg(""), 2000); }
+      if (data.ok) {
+        await login({ ...currentUser, displayName: displayName.trim() });
+        setProfileMsg("已保存");
+        setTimeout(() => setProfileMsg(""), 2000);
+      }
       else setProfileMsg("保存失败");
     } catch { setProfileMsg("网络错误"); }
     setProfileLoading(false);
@@ -53,7 +61,7 @@ export default function SettingsPage() {
     try {
       const res = await fetch("/api/v2/auth", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "changePassword", userId: currentUser?.id, oldPassword: oldPw, newPassword: newPw }),
+        body: JSON.stringify({ action: "changePassword", oldPassword: oldPw, newPassword: newPw }),
       });
       const data = await res.json();
       if (data.ok) { setPwMsg("密码修改成功"); setOldPw(""); setNewPw(""); }
@@ -69,6 +77,24 @@ export default function SettingsPage() {
   const [fontSize, setFontSize] = useState(preferences.fontSize);
   const [theme, setTheme] = useState(preferences.theme);
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setDisplayName(currentUser?.displayName || "");
+    setEmail(currentUser?.email || "");
+  }, [currentUser]);
+
+  useEffect(() => {
+    setApiKey(aiSettings.apiKey);
+    setBaseUrl(aiSettings.baseUrl);
+    setModel(aiSettings.model);
+    setTemperature(aiSettings.temperature);
+    setMaxTokens(aiSettings.maxTokens);
+  }, [aiSettings]);
+
+  useEffect(() => {
+    setFontSize(preferences.fontSize);
+    setTheme(preferences.theme);
+  }, [preferences]);
 
   const tabs: { id: TabId; label: string; icon: typeof Settings }[] = [
     { id: "profile", label: "个人资料", icon: User },
@@ -162,14 +188,14 @@ export default function SettingsPage() {
       </header>
 
       <div className="mx-auto max-w-4xl px-6 py-6">
-        <div className="flex gap-6">
+        <div className="flex flex-col gap-6 sm:flex-row">
           {/* Side tabs */}
-          <nav className="w-44 shrink-0 space-y-1">
+          <nav className="flex w-full shrink-0 gap-1 overflow-x-auto sm:block sm:w-44 sm:space-y-1">
             {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${
+                className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2 text-sm transition-colors sm:w-full ${
                   activeTab === tab.id
                     ? "bg-[var(--primary)]/10 font-medium text-[var(--primary)]"
                     : "text-[var(--muted-foreground)] hover:bg-[var(--accent)]"
@@ -200,7 +226,11 @@ export default function SettingsPage() {
                         <label className="mb-1 block text-sm">邮箱</label>
                         <Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" placeholder="your@email.com" />
                       </div>
-                      <Button onClick={handleLogin}>保存并登录</Button>
+                      <div>
+                        <label className="mb-1 block text-sm">密码</label>
+                        <Input value={password} onChange={(e) => setPassword(e.target.value)} type="password" />
+                      </div>
+                      <Button onClick={handleLogin}>登录</Button>
                     </div>
                   </div>
                 ) : (
@@ -251,7 +281,7 @@ export default function SettingsPage() {
                       </button>
                     </div>
                     <p className="mt-1 text-xs text-[var(--muted-foreground)]">
-                      密钥存储在本地，不会上传到任何服务器
+                      密钥保存在你的账户设置中，并仅用于向所配置的 AI 服务发起请求
                     </p>
                   </div>
 
@@ -260,7 +290,7 @@ export default function SettingsPage() {
                     <Input value={baseUrl} onChange={(e) => setBaseUrl(e.target.value)} />
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
                     <div>
                       <label className="mb-1 block text-sm font-medium">模型</label>
                       <select
@@ -382,8 +412,8 @@ export default function SettingsPage() {
                         </p>
                         <Button
                           variant="destructive"
-                          onClick={() => {
-                            logout();
+                          onClick={async () => {
+                            await logout();
                             router.push("/login");
                           }}
                           className="gap-2"
@@ -413,7 +443,7 @@ export default function SettingsPage() {
                   <div>
                     <h3 className="mb-2 text-sm font-medium">📡 数据存储</h3>
                     <p className="mb-3 text-sm text-[var(--muted-foreground)]">
-                      数据已自动保存在服务器 MySQL 中。登录后所有设备自动同步。
+                      书籍、章节、批注、聊天和账户设置保存在服务器；知识卡片、思维导图与复习进度目前保存在当前浏览器。
                     </p>
                   </div>
                   <hr className="border-[var(--border)]" />

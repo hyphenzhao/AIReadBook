@@ -9,12 +9,14 @@ import { UserMenu } from "@/components/shared/UserMenu";
 import { useLibraryStore } from "@/stores/library-store";
 import { useUserStore } from "@/stores/user-store";
 import { useChatStore } from "@/stores/chat-store";
+import { useAnnotationStore } from "@/stores/annotation-store";
+import { useKnowledgeStore } from "@/stores/knowledge-store";
+import { useReviewStore } from "@/stores/review-store";
 
 export default function LibraryPage() {
   const { books, ready, load, removeBook, updateCover } = useLibraryStore();
   const isLoggedIn = useUserStore(s => s.isLoggedIn);
   const currentUser = useUserStore(s => s.currentUser);
-  const { sessions, deleteSession } = useChatStore();
   const [search, setSearch] = useState("");
 
   // Auto-load from MySQL on first visit
@@ -24,22 +26,48 @@ export default function LibraryPage() {
     }
   }, [ready, isLoggedIn, currentUser, load]);
 
-  function handleDeleteBook(bookId: string, title: string) {
+  async function handleDeleteBook(bookId: string, title: string) {
     if (!confirm(`确定删除《${title}》吗？\n\n删除后该书的聊天记录、批注、知识卡片等数据也将被清除。`)) return;
 
-    // Cascade delete related data
-    const bookSessions = sessions.filter((s) => s.bookId === bookId);
-    bookSessions.forEach((s) => deleteSession(s.id));
-    removeBook(bookId);
+    try {
+      // The database cascades server-owned records. Clear browser-owned records
+      // only after that deletion succeeds.
+      await removeBook(bookId);
+      useChatStore.setState((state) => ({
+        sessions: state.sessions.filter((session) => session.bookId !== bookId),
+      }));
+      useAnnotationStore.setState((state) => ({
+        annotations: state.annotations.filter((annotation) => annotation.bookId !== bookId),
+      }));
+      useKnowledgeStore.setState((state) => ({
+        cards: state.cards.filter((card) => card.bookId !== bookId),
+        mindMaps: state.mindMaps.filter((mindMap) => mindMap.bookId !== bookId),
+      }));
+      useReviewStore.setState((state) => ({
+        cards: state.cards.filter((card) => card.bookId !== bookId),
+      }));
+    } catch {
+      alert("删除失败，书籍和相关数据已保留");
+    }
   }
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingCoverId, setEditingCoverId] = useState<string | null>(null);
 
   function handleCoverUpload(bookId: string, file: File) {
-    const reader = new FileReader();
-    reader.onload = () => {
-      updateCover(bookId, reader.result as string);
+    if (!file.type.startsWith("image/") || file.size > 3 * 1024 * 1024) {
+      alert("请选择不超过 3MB 的图片文件");
       setEditingCoverId(null);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        await updateCover(bookId, reader.result as string);
+      } catch {
+        alert("封面保存失败，请重试");
+      } finally {
+        setEditingCoverId(null);
+      }
     };
     reader.readAsDataURL(file);
   }
@@ -94,7 +122,11 @@ export default function LibraryPage() {
           />
         </div>
 
-        {filtered.length === 0 ? (
+        {!ready ? (
+          <div className="py-24 text-center text-sm text-[var(--muted-foreground)]">
+            正在加载书库...
+          </div>
+        ) : filtered.length === 0 ? (
           <div className="py-24 text-center">
             <BookOpen className="mx-auto mb-4 h-12 w-12 text-[var(--muted-foreground)]" />
             <h2 className="text-lg font-medium">

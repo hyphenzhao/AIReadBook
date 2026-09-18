@@ -1,11 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireSessionUserId, sessionError } from "@/lib/auth-session";
 
 // POST /api/v2/sync — upload all local data to MySQL for a user
 export async function POST(req: NextRequest) {
   try {
-    const { userId, books, annotations, chatSessions, reviewCards } = await req.json();
-    if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+    const userId = await requireSessionUserId();
+    const { books, annotations, chatSessions, reviewCards } = await req.json();
 
     // Map old UUID bookIds → new MySQL auto-increment IDs
     const bookIdMap = new Map<string, number>();
@@ -44,7 +45,8 @@ export async function POST(req: NextRequest) {
     // Insert annotations — map old bookId to new
     if (annotations?.length) {
       for (const a of annotations) {
-        const newBookId = bookIdMap.get(a.bookId) || 1;
+        const newBookId = bookIdMap.get(a.bookId);
+        if (!newBookId) continue;
         await prisma.annotation.create({
           data: { userId, bookId: newBookId, chapterId: null, selectedText: a.selectedText || "", note: a.note || "", color: a.color || "yellow" },
         });
@@ -54,7 +56,8 @@ export async function POST(req: NextRequest) {
     // Chat sessions — map old bookId to new
     if (chatSessions?.length) {
       for (const s of chatSessions) {
-        const newBookId = bookIdMap.get(s.bookId) || 1;
+        const newBookId = bookIdMap.get(s.bookId);
+        if (!newBookId) continue;
         const session = await prisma.chatSession.create({
           data: { bookId: newBookId, chapterId: null, title: s.title || "对话", mode: s.mode || "companion" },
         });
@@ -68,20 +71,40 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    return NextResponse.json({ ok: true, books: books?.length || 0, annotations: annotations?.length || 0, sessions: chatSessions?.length || 0 });
+    if (reviewCards?.length) {
+      for (const card of reviewCards) {
+        const newBookId = bookIdMap.get(card.bookId);
+        if (!newBookId || !card.front || !card.back) continue;
+        await prisma.reviewCard.create({
+          data: {
+            userId,
+            bookId: newBookId,
+            front: card.front,
+            back: card.back,
+            sourceType: card.sourceType || "manual",
+            easeFactor: Number(card.easeFactor) || 2.5,
+            interval: Number(card.interval) || 0,
+            repetitions: Number(card.repetitions) || 0,
+            nextReview: card.nextReview ? new Date(card.nextReview) : new Date(),
+            lastReview: card.lastReview ? new Date(card.lastReview) : null,
+          },
+        });
+      }
+    }
+
+    return NextResponse.json({ ok: true, books: books?.length || 0, annotations: annotations?.length || 0, sessions: chatSessions?.length || 0, reviewCards: reviewCards?.length || 0 });
   } catch (e: any) {
     console.error("Sync upload error:", e);
-    return NextResponse.json({ error: e?.message || "Sync failed" }, { status: 500 });
+    return sessionError(e);
   }
 }
 
 // GET /api/v2/sync?userId= — pull all data from MySQL
 export async function GET(req: NextRequest) {
   try {
-    const userId = parseInt(req.nextUrl.searchParams.get("userId") || "0");
-    if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
+    const userId = await requireSessionUserId();
 
-    const [books, annotations, sessions] = await Promise.all([
+    const [books, annotations, sessions, reviewCards] = await Promise.all([
       prisma.book.findMany({
         where: { userId },
         include: { chaptersRel: { orderBy: { index: "asc" } } },
@@ -138,9 +161,25 @@ export async function GET(req: NextRequest) {
         createdAt: s.createdAt.toISOString(),
         updatedAt: s.updatedAt.toISOString(),
       })),
+      reviewCards: reviewCards.map((card) => ({
+        id: String(card.id),
+        userId: String(card.userId),
+        bookId: String(card.bookId),
+        sourceType: card.sourceType,
+        sourceId: null,
+        front: card.front,
+        back: card.back,
+        tags: [],
+        easeFactor: card.easeFactor,
+        interval: card.interval,
+        repetitions: card.repetitions,
+        nextReview: card.nextReview.toISOString(),
+        lastReview: card.lastReview?.toISOString() || null,
+        createdAt: card.createdAt.toISOString(),
+      })),
     });
   } catch (e) {
     console.error("Sync download error:", e);
-    return NextResponse.json({ error: "Sync failed" }, { status: 500 });
+    return sessionError(e);
   }
 }

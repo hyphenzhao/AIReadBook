@@ -1,11 +1,15 @@
 import { generateText } from "ai";
 import { createDeepSeekClient, DEEPSEEK_DEFAULT } from "@/lib/ai/client";
 import { searchAllSources } from "@/lib/search/external-books";
+import { getSessionUserId } from "@/lib/auth-session";
 
 export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
+    if (!(await getSessionUserId())) {
+      return Response.json({ error: "请先登录" }, { status: 401 });
+    }
     const { bookTitle, bookAuthor, topics } = await req.json();
 
     if (!bookTitle) {

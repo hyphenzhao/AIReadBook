@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { List, Highlighter, Brain, Trash2, Edit3, ChevronDown, Tag } from "lucide-react";
+import { List, Highlighter, Brain, Trash2, Edit3, Tag } from "lucide-react";
+import Link from "next/link";
 import { useReadingStore } from "@/stores/reading-store";
 import { useAnnotationStore } from "@/stores/annotation-store";
 import { Button } from "@/components/ui/button";
@@ -193,8 +194,16 @@ export function LeftPanel() {
         {activeTab === "extractions" && (
           <div className="py-12 text-center text-sm text-[var(--muted-foreground)]">
             <Brain className="mx-auto mb-2 h-8 w-8 opacity-50" />
-            <p>知识提取功能</p>
-            <p className="mt-1 text-xs">点击右侧 AI 面板的"提取关键点"生成</p>
+            <p>知识卡片管理</p>
+            <p className="mt-1 text-xs">在 AI 面板提取后，可集中查看和加入复习</p>
+            {currentBook && (
+              <Link
+                href={`/read/${currentBook.id}/knowledge`}
+                className="mt-3 inline-block rounded bg-[var(--primary)] px-3 py-1.5 text-xs text-[var(--primary-foreground)]"
+              >
+                打开知识管理
+              </Link>
+            )}
           </div>
         )}
       </div>

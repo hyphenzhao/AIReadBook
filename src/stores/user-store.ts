@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 import * as api from "@/lib/api-client-v2";
 
 export interface AISettings { apiKey: string; baseUrl: string; model: string; temperature: number; maxTokens: number; }
@@ -10,9 +11,11 @@ interface UserState {
   currentUser: UserProfile | null;
   aiSettings: AISettings;
   preferences: UserPreferences;
+  sessionReady: boolean;
 
   login: (profile: UserProfile) => Promise<void>;
-  logout: () => void;
+  restoreSession: () => Promise<void>;
+  logout: () => Promise<void>;
   loadSettings: (userId: number) => Promise<void>;
   updateAISettings: (settings: Partial<AISettings>) => void;
   updatePreferences: (prefs: Partial<UserPreferences>) => void;
@@ -21,16 +24,49 @@ interface UserState {
 const defaultAISettings: AISettings = { apiKey: "", baseUrl: "https://api.deepseek.com", model: "deepseek-v4-flash", temperature: 0.7, maxTokens: 2048 };
 const defaultPreferences: UserPreferences = { fontSize: 16, lineHeight: 1.6, fontFamily: "system", theme: "light", language: "zh" };
 
-export const useUserStore = create<UserState>()((set, get) => ({
+export const useUserStore = create<UserState>()(persist((set, get) => ({
   isLoggedIn: false, currentUser: null,
+  sessionReady: false,
   aiSettings: { ...defaultAISettings }, preferences: { ...defaultPreferences },
 
   login: async (profile) => {
-    set({ isLoggedIn: true, currentUser: profile });
+    set({ isLoggedIn: true, currentUser: profile, sessionReady: true });
     await get().loadSettings(profile.id);
   },
 
-  logout: () => set({ isLoggedIn: false, currentUser: null, aiSettings: { ...defaultAISettings } }),
+  restoreSession: async () => {
+    try {
+      const data = await api.apiGetSession();
+      const user = data.user;
+      if (user) {
+        const profile = {
+          id: user.id,
+          displayName: user.name || user.email.split("@")[0],
+          email: user.email,
+          avatarUrl: null,
+        };
+        set({ isLoggedIn: true, currentUser: profile });
+        await get().loadSettings(profile.id);
+      }
+    } catch {
+      set({ isLoggedIn: false, currentUser: null });
+    } finally {
+      set({ sessionReady: true });
+    }
+  },
+
+  logout: async () => {
+    try { await api.apiLogout(); } catch {}
+    const [{ useLibraryStore }, { useAnnotationStore }, { useChatStore }] = await Promise.all([
+      import("@/stores/library-store"),
+      import("@/stores/annotation-store"),
+      import("@/stores/chat-store"),
+    ]);
+    useLibraryStore.setState({ books: [], ready: false });
+    useAnnotationStore.setState({ annotations: [], ready: false });
+    useChatStore.setState({ sessions: [], ready: false });
+    set({ isLoggedIn: false, currentUser: null, aiSettings: { ...defaultAISettings }, sessionReady: true });
+  },
 
   loadSettings: async (userId) => {
     api.setUserId(userId);
@@ -49,4 +85,7 @@ export const useUserStore = create<UserState>()((set, get) => ({
   },
 
   updatePreferences: (prefs) => set(s => ({ preferences: { ...s.preferences, ...prefs } })),
+}), {
+  name: "aireadbook-user",
+  partialize: (state) => ({ preferences: state.preferences }),
 }));

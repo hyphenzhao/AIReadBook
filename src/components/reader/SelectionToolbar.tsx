@@ -17,6 +17,7 @@ export function SelectionToolbar({ selectedText, position, onClose }: SelectionT
   const [showColors, setShowColors] = useState(false);
   const [showNote, setShowNote] = useState(false);
   const [note, setNote] = useState("");
+  const [selectedColor, setSelectedColor] = useState<(typeof COLORS)[number]>("yellow");
   const addAnnotation = useAnnotationStore((s) => s.addAnnotation);
   const { currentBook, currentChapter } = useReadingStore();
 
@@ -41,8 +42,8 @@ export function SelectionToolbar({ selectedText, position, onClose }: SelectionT
   // Position the toolbar near the selection
   const style: React.CSSProperties = {
     position: "fixed",
-    left: Math.min(position.x, window.innerWidth - 200),
-    top: position.y - 50,
+    left: Math.max(8, Math.min(position.x - 100, window.innerWidth - 208)),
+    top: Math.max(8, position.y - 50),
     zIndex: 100,
   };
 
@@ -74,7 +75,7 @@ export function SelectionToolbar({ selectedText, position, onClose }: SelectionT
           {COLORS.map((c) => (
             <button
               key={c}
-              onClick={() => handleHighlight(c)}
+              onClick={() => { setSelectedColor(c); handleHighlight(c); }}
               className={`h-5 w-5 rounded-full border-2 transition-transform hover:scale-110 ${
                 c === "yellow"
                   ? "bg-yellow-300 border-yellow-400"
@@ -129,7 +130,7 @@ export function SelectionToolbar({ selectedText, position, onClose }: SelectionT
             </button>
             <button
               onClick={() => {
-                handleHighlight("yellow");
+                handleHighlight(selectedColor);
                 setShowNote(false);
               }}
               className="rounded bg-[var(--primary)] px-2 py-0.5 text-xs text-white"

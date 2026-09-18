@@ -5,10 +5,10 @@ AI 驱动的深度阅读 Web 应用。**AI 作为阅读助手，部分或完全�
 ## 功能概览
 
 ### 📖 智能阅读
-- EPUB 电子书上传、自动解析（元数据、目录、章节纯文本）
+- EPUB 电子书上传、自动解析并持久化到 MySQL（元数据、目录、章节纯文本）
 - 三栏布局阅读器：左侧导航 | 中间阅读 | 右侧 AI 面板
 - 章节导航、字体/主题设置
-- 移动端适配 + PWA 可安装
+- 移动端抽屉/上下分栏适配 + PWA 清单
 
 ### 🤖 四种 AI 阅读模式
 
@@ -18,6 +18,13 @@ AI 驱动的深度阅读 Web 应用。**AI 作为阅读助手，部分或完全�
 | **摘要** | AI 生成三级摘要（一句话/段落式/关键要点） |
 | **提取** | AI 提取核心概念、论点、论据，生成结构化知识卡片 |
 | **教学** | 苏格拉底式提问，引导用户深入理解 |
+
+伴读请求由服务端阅读 pipeline 约束：
+
+- `read_current_chapter`：处理“本章、这段、当前内容”等指代，直接读取阅读器正在显示的章节
+- `read_book`：处理全书总结与全局结构问题；超出上下文窗口时按章均匀摘取并明确披露
+- `search_book`：处理开放式书内问题，优先全文检索，并为中文查询提供 contains 检索 fallback
+- 回答模型只能把工具实际返回的原文作为书内事实和引用依据
 
 ### 📝 知识管理
 - **划线批注**：5 色划线 + 笔记，AI 自动分类标签
@@ -46,8 +53,8 @@ AI 驱动的深度阅读 Web 应用。**AI 作为阅读助手，部分或完全�
 | 支持模型 | deepseek-v4-flash / deepseek-v4-pro |
 | EPUB 解析 | JSZip |
 | 可视化 | D3.js (思维导图) |
-| 数据库 | Prisma + PostgreSQL (可选) |
-| 认证 | Supabase Auth (可选) |
+| 数据库 | Prisma + MySQL |
+| 认证 | bcrypt + 签名的 HTTP-only 会话 Cookie |
 | PWA | Web App Manifest + 独立窗口模式 |
 
 ## 快速开始
@@ -65,11 +72,15 @@ cd AIReadBook
 
 npm install
 
-# 配置环境变量
+# 配置 MySQL、会话密钥和可选的服务器 AI Key
 cp .env.local.example .env.local
-# 编辑 .env.local 填入 DEEPSEEK_API_KEY
+# 编辑 .env.local
 
-npm run dev
+npx prisma generate
+npx prisma db push
+
+npm run build
+npm start
 ```
 
 打开 http://localhost:3000
@@ -128,12 +139,9 @@ src/
 DEEPSEEK_API_KEY=sk-xxx            # DeepSeek API Key
 DEEPSEEK_BASE_URL=https://api.deepseek.com
 
-# 可选（Auth）
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-
-# 可选（DB）
-DATABASE_URL=postgresql://...
+DATABASE_URL=mysql://user:password@localhost:3306/aireadbook
+AUTH_SECRET=use-a-long-random-value
+AUTH_COOKIE_SECURE=false       # HTTPS 部署时设为 true
 ```
 
 ## 路线图

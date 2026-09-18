@@ -11,6 +11,8 @@ import { useKnowledgeStore, type KnowledgeCard } from "@/stores/knowledge-store"
 import { useLibraryStore } from "@/stores/library-store";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useReviewStore } from "@/stores/review-store";
+import { useUserStore } from "@/stores/user-store";
 
 const TYPE_LABELS: Record<string, { label: string; icon: typeof Brain }> = {
   concept: { label: "概念", icon: Brain },
@@ -35,6 +37,8 @@ export default function KnowledgePage() {
   const book = useLibraryStore((s) => s.getBook(bookId));
   const { getBookCards } = useKnowledgeStore();
   const cards = getBookCards(bookId);
+  const addReviewCard = useReviewStore((s) => s.addCard);
+  const currentUser = useUserStore((s) => s.currentUser);
 
   const [search, setSearch] = useState("");
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
@@ -193,6 +197,25 @@ export default function KnowledgePage() {
               </div>
             )}
             <div className="mt-6 flex gap-2">
+              <Button
+                size="sm"
+                onClick={() => {
+                  if (!currentUser || !book) return;
+                  addReviewCard({
+                    userId: String(currentUser.id),
+                    bookId,
+                    bookTitle: book.title,
+                    sourceType: "knowledge_card",
+                    sourceId: selectedCard.id,
+                    front: selectedCard.title,
+                    back: selectedCard.content,
+                    tags: selectedCard.tags,
+                  });
+                  setSelectedCard(null);
+                }}
+              >
+                加入间隔复习
+              </Button>
               <Button variant="outline" size="sm" onClick={() => setSelectedCard(null)}>
                 关闭
               </Button>

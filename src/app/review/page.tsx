@@ -6,30 +6,46 @@ import { ArrowLeft, Brain, RotateCw, Check, ThumbsUp, ThumbsDown } from "lucide-
 import { useReviewStore } from "@/stores/review-store";
 import { describeInterval } from "@/lib/spaced-repetition/sm2";
 import { Button } from "@/components/ui/button";
+import { useUserStore } from "@/stores/user-store";
 
 export default function ReviewPage() {
-  const { cards, getDueCards, gradeCard, getStats } = useReviewStore();
+  const { cards, getDueCards, gradeCard } = useReviewStore();
+  const userId = useUserStore((s) => s.currentUser?.id);
+  const [reviewIds, setReviewIds] = useState<string[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isFlipped, setIsFlipped] = useState(false);
   const [completed, setCompleted] = useState(false);
 
-  const dueCards = getDueCards();
-  const currentCard = dueCards[currentIndex];
-  const stats = getStats();
+  useEffect(() => {
+    if (!userId) return;
+    setReviewIds(getDueCards().filter((card) => card.userId === String(userId)).map((card) => card.id));
+    setCurrentIndex(0);
+    setCompleted(false);
+  }, [getDueCards, userId]);
+
+  const currentCard = cards.find((card) => card.id === reviewIds[currentIndex]);
+  const userCards = cards.filter((card) => card.userId === String(userId ?? ""));
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const stats = {
+    total: userCards.length,
+    due: userCards.filter((card) => new Date(card.nextReview) <= now).length,
+    reviewedToday: userCards.filter((card) => card.lastReview && new Date(card.lastReview) >= today).length,
+  };
 
   function handleGrade(quality: number) {
     if (!currentCard) return;
     gradeCard(currentCard.id, quality);
     setIsFlipped(false);
 
-    if (currentIndex + 1 >= dueCards.length) {
+    if (currentIndex + 1 >= reviewIds.length) {
       setCompleted(true);
     } else {
       setCurrentIndex((i) => i + 1);
     }
   }
 
-  if (!dueCards.length || completed) {
+  if (!reviewIds.length || completed || !currentCard) {
     return (
       <div className="min-h-screen bg-[var(--background)]">
         <header className="border-b border-[var(--border)]">
@@ -48,7 +64,7 @@ export default function ReviewPage() {
           </h2>
           <p className="mt-2 text-[var(--muted-foreground)]">
             {completed
-              ? `你已复习了 ${dueCards.length + (currentIndex - dueCards.length)} 张卡片`
+              ? `你已复习了 ${reviewIds.length} 张卡片`
               : "使用 AI 生成复习卡片，或手动创建"}
           </p>
 
@@ -84,7 +100,7 @@ export default function ReviewPage() {
           </Link>
           <h1 className="text-lg font-semibold">间隔复习</h1>
           <span className="ml-auto text-sm text-[var(--muted-foreground)]">
-            {currentIndex + 1} / {dueCards.length}
+            {currentIndex + 1} / {reviewIds.length}
           </span>
         </div>
       </header>
@@ -94,7 +110,7 @@ export default function ReviewPage() {
         <div className="mb-8 h-1 w-full rounded-full bg-[var(--accent)]">
           <div
             className="h-full rounded-full bg-[var(--primary)] transition-all duration-300"
-            style={{ width: `${((currentIndex + 1) / dueCards.length) * 100}%` }}
+            style={{ width: `${((currentIndex + 1) / reviewIds.length) * 100}%` }}
           />
         </div>
 

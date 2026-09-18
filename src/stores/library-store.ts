@@ -14,7 +14,7 @@ interface LibraryState {
   load: (userId: number) => Promise<void>;
   addBook: (book: StoredBook) => Promise<string>;
   removeBook: (id: string) => Promise<void>;
-  updateCover: (id: string, coverUrl: string) => void;
+  updateCover: (id: string, coverUrl: string) => Promise<void>;
   getBook: (id: string) => StoredBook | undefined;
 }
 
@@ -49,26 +49,32 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   },
 
   addBook: async (book) => {
-    try {
-      const result = await api.apiCreateBook(book);
-      const newBook = { ...book, id: result.id, uploadedAt: new Date().toISOString() };
-      set(s => ({ books: [newBook, ...s.books] }));
-      return result.id;
-    } catch {
-      // Fallback: local-only
-      const id = crypto.randomUUID?.() || Math.random().toString(36);
-      set(s => ({ books: [{ ...book, id }, ...s.books] }));
-      return id;
-    }
+    const result = await api.apiCreateBook(book);
+    const newBook = {
+      ...book,
+      id: result.id,
+      chapters: Array.isArray(result.chapters) ? result.chapters : book.chapters,
+      uploadedAt: new Date().toISOString(),
+    };
+    set(s => ({ books: [newBook, ...s.books] }));
+    return result.id;
   },
 
   removeBook: async (id) => {
+    const removed = get().books.find((b) => b.id === id);
     set(s => ({ books: s.books.filter(b => b.id !== id) }));
-    try { await api.apiDeleteBook(id); } catch {}
+    try {
+      await api.apiDeleteBook(id);
+    } catch (error) {
+      if (removed) set((s) => ({ books: [removed, ...s.books] }));
+      throw error;
+    }
   },
 
-  updateCover: (id, coverUrl) =>
-    set(s => ({ books: s.books.map(b => b.id === id ? { ...b, coverUrl } : b) })),
+  updateCover: async (id, coverUrl) => {
+    await api.apiUpdateBook(id, { coverUrl });
+    set(s => ({ books: s.books.map(b => b.id === id ? { ...b, coverUrl } : b) }));
+  },
 
   getBook: (id) => get().books.find(b => b.id === id),
 }));

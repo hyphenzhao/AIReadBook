@@ -8,8 +8,12 @@ import { LeftPanel } from "@/components/reader/panels/LeftPanel";
 import { AIPanel } from "@/components/reader/ai/AIPanel";
 import { SelectionToolbar } from "@/components/reader/SelectionToolbar";
 import { MobileNav } from "@/components/reader/MobileNav";
+import { HighlightedText } from "@/components/reader/HighlightedText";
 import { useReadingStore } from "@/stores/reading-store";
 import { useLibraryStore } from "@/stores/library-store";
+import { useAnnotationStore } from "@/stores/annotation-store";
+import { useUserStore } from "@/stores/user-store";
+import { useChatStore } from "@/stores/chat-store";
 import type { Chapter } from "@/types";
 import { BookOpen } from "lucide-react";
 
@@ -18,8 +22,12 @@ export default function ReadPage() {
   const router = useRouter();
   const bookId = params.bookId as string;
   const getBook = useLibraryStore((s) => s.getBook);
-  const { setBook, setChapters, setChapter, currentChapter, chapters } = useReadingStore();
+  const libraryReady = useLibraryStore((s) => s.ready);
+  const preferences = useUserStore((s) => s.preferences);
+  const { setBook, setChapters, setChapter, currentChapter, chapters, currentBook } = useReadingStore();
+  const { getBookAnnotations } = useAnnotationStore();
   const [content, setContent] = useState("");
+  const bookAnnotations = currentBook ? getBookAnnotations(currentBook.id) : [];
   const [notFound, setNotFound] = useState(false);
   const [selection, setSelection] = useState<{
     text: string;
@@ -40,16 +48,18 @@ export default function ReadPage() {
     setSelection({
       text,
       x: rect.left + rect.width / 2,
-      y: rect.top + window.scrollY,
+      y: rect.top,
     });
   }, []);
 
   useEffect(() => {
+    if (!libraryReady) return;
     const book = getBook(bookId);
     if (!book) {
       setNotFound(true);
       return;
     }
+    setNotFound(false);
 
     // Convert stored book to reading store format
     setBook({
@@ -88,11 +98,25 @@ export default function ReadPage() {
     if (mappedChapters.length > 0) {
       setChapter(mappedChapters[0]);
     }
-  }, [bookId, getBook, setBook, setChapters, setChapter]);
+  }, [bookId, getBook, libraryReady, setBook, setChapters, setChapter]);
+
+  useEffect(() => {
+    if (libraryReady && getBook(bookId)) {
+      useChatStore.getState().load(bookId);
+    }
+  }, [bookId, getBook, libraryReady]);
 
   useEffect(() => {
     setContent(currentChapter?.plainText ?? "");
   }, [currentChapter]);
+
+  if (!libraryReady) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-sm text-[var(--muted-foreground)]">
+        正在加载书籍...
+      </div>
+    );
+  }
 
   if (notFound) {
     return (
@@ -131,20 +155,29 @@ export default function ReadPage() {
                     onClose={() => setSelection(null)}
                   />
                 )}
-                <div className="prose prose-slate max-w-none dark:prose-invert">
+                <div
+                  className="prose prose-slate max-w-none dark:prose-invert"
+                  style={{
+                    fontSize: `${preferences.fontSize}px`,
+                    lineHeight: preferences.lineHeight,
+                    fontFamily: preferences.fontFamily === "system" ? undefined : preferences.fontFamily,
+                  }}
+                >
                   {currentChapter?.title && (
                     <h2 className="mb-6 text-center text-xl font-bold">
                       {currentChapter.title}
                     </h2>
                   )}
                   {content ? (
-                    content.split("\n\n").map((para, i) =>
-                      para.trim() ? (
-                        <p key={i} className="mb-4 leading-relaxed">
-                          {para}
-                        </p>
-                      ) : null,
-                    )
+                    <div className="space-y-4">
+                      {content.split("\n\n").map((para, i) =>
+                        para.trim() ? (
+                          <p key={i} className="leading-relaxed">
+                            <HighlightedText text={para} annotations={bookAnnotations} />
+                          </p>
+                        ) : null,
+                      )}
+                    </div>
                   ) : (
                     <div className="py-24 text-center text-[var(--muted-foreground)]">
                       选择左侧目录中的章节开始阅读

@@ -39,7 +39,7 @@ interface GoogleBookItem {
 export async function searchOpenLibrary(query: string): Promise<ExternalBook[]> {
   try {
     const url = `https://openlibrary.org/search.json?q=${encodeURIComponent(query)}&limit=10`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
     if (!res.ok) return [];
     const data = await res.json();
 
@@ -63,7 +63,7 @@ export async function searchOpenLibrary(query: string): Promise<ExternalBook[]> 
 export async function searchGoogleBooks(query: string): Promise<ExternalBook[]> {
   try {
     const url = `https://www.googleapis.com/books/v1/volumes?q=${encodeURIComponent(query)}&maxResults=10&langRestrict=zh`;
-    const res = await fetch(url);
+    const res = await fetch(url, { signal: AbortSignal.timeout(8_000) });
     if (!res.ok) return [];
     const data = await res.json();
 

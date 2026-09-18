@@ -1,12 +1,14 @@
 "use client";
 
-import { BookOpen, MessageCircle, Brain, Library } from "lucide-react";
+import { BookOpen, MessageCircle, Brain, Library, PanelBottom, PanelRight } from "lucide-react";
 import Link from "next/link";
 import { useUIStore } from "@/stores/ui-store";
 import { useReadingStore } from "@/stores/reading-store";
 
 export function MobileNav() {
   const bookId = useReadingStore((s) => s.currentBook?.id);
+  const aiPanelPosition = useUIStore((s) => s.aiPanelPosition);
+  const toggleAiPanelPosition = useUIStore((s) => s.toggleAiPanelPosition);
 
   return (
     <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-14 items-center justify-around border-t border-[var(--border)] bg-[var(--background)] safe-area-bottom md:hidden">
@@ -35,6 +37,20 @@ export function MobileNav() {
           <span>知识</span>
         </Link>
       )}
+
+      <button
+        onClick={toggleAiPanelPosition}
+        className="flex flex-col items-center gap-0.5 text-xs text-[var(--muted-foreground)]"
+        title={aiPanelPosition === "right" ? "将 AI 助手移到底部" : "将 AI 助手移到右侧"}
+        aria-label={aiPanelPosition === "right" ? "将 AI 助手移到底部" : "将 AI 助手移到右侧"}
+      >
+        {aiPanelPosition === "right" ? (
+          <PanelBottom className="h-5 w-5" />
+        ) : (
+          <PanelRight className="h-5 w-5 text-[var(--primary)]" />
+        )}
+        <span>{aiPanelPosition === "right" ? "下置 AI" : "右置 AI"}</span>
+      </button>
 
       <button
         onClick={() => useUIStore.getState().toggleRightPanel()}

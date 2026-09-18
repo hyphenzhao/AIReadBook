@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import * as d3 from "d3";
-import { ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
+import { ZoomIn, ZoomOut } from "lucide-react";
 import type { MindMapNode } from "@/stores/knowledge-store";
 
 interface MindMapViewerProps {
@@ -15,6 +15,7 @@ interface MindMapViewerProps {
 export function MindMapViewer({ data, title, editable, onNodeClick }: MindMapViewerProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   const [dimensions, setDimensions] = useState({ width: 800, height: 600 });
 
   useEffect(() => {
@@ -112,24 +113,26 @@ export function MindMapViewer({ data, title, editable, onNodeClick }: MindMapVie
       });
 
     // Zoom behavior
-    const zoom: any = d3
-      .zoom()
+    const zoom = d3
+      .zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.3, 3])
-      .on("zoom", (event: any) => {
+      .on("zoom", (event) => {
         g.attr("transform", event.transform);
       });
+    zoomRef.current = zoom;
 
     svg.call(zoom);
 
     // Center the view
-    const initialTransform: any = d3.zoomIdentity.translate(margin.left, margin.top);
+    const initialTransform = d3.zoomIdentity.translate(margin.left, margin.top);
     svg.call(zoom.transform, initialTransform);
   }, [data, dimensions, onNodeClick]);
 
   function handleZoom(factor: number) {
     if (!svgRef.current) return;
     const svg = d3.select(svgRef.current);
-    const zoom: any = d3.zoom();
+    const zoom = zoomRef.current;
+    if (!zoom) return;
     svg.transition().duration(300).call(zoom.scaleBy, factor);
   }
 

@@ -6,6 +6,9 @@ export async function GET(request: NextRequest) {
   if (!q || q.trim().length < 2) {
     return NextResponse.json({ results: [] });
   }
+  if (q.trim().length > 200) {
+    return NextResponse.json({ results: [], error: "Query too long" }, { status: 400 });
+  }
 
   try {
     const results = await searchAllSources(q.trim());

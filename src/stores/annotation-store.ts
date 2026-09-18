@@ -50,7 +50,15 @@ export const useAnnotationStore = create<AnnotationState>()((set, get) => ({
     const annotation: Annotation = { ...input, id, aiCategory: null, aiSummary: null, createdAt: new Date().toISOString() };
     set(s => ({ annotations: [annotation, ...s.annotations] }));
     // Async sync
-    api.apiCreateAnnotation({ bookId: input.bookId, chapterId: input.chapterId, selectedText: input.selectedText, note: input.note, color: input.color }).catch(() => {});
+    api.apiCreateAnnotation({ bookId: input.bookId, chapterId: input.chapterId, selectedText: input.selectedText, note: input.note, color: input.color })
+      .then((result) => {
+        set((s) => ({
+          annotations: s.annotations.map((a) => a.id === id ? { ...a, id: result.id } : a),
+        }));
+      })
+      .catch(() => {
+        set((s) => ({ annotations: s.annotations.filter((a) => a.id !== id) }));
+      });
     return id;
   },
 
@@ -59,8 +67,13 @@ export const useAnnotationStore = create<AnnotationState>()((set, get) => ({
     api.apiUpdateAnnotation(id, updates).catch(() => {});
   },
 
-  removeAnnotation: (id) =>
-    set(s => ({ annotations: s.annotations.filter(a => a.id !== id) })),
+  removeAnnotation: (id) => {
+    const removed = get().annotations.find((a) => a.id === id);
+    set(s => ({ annotations: s.annotations.filter(a => a.id !== id) }));
+    api.apiDeleteAnnotation(id).catch(() => {
+      if (removed) set((s) => ({ annotations: [removed, ...s.annotations] }));
+    });
+  },
 
   getBookAnnotations: (bookId) => get().annotations.filter(a => a.bookId === bookId),
 

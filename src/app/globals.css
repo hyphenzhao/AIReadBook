@@ -48,6 +48,20 @@
   --destructive-foreground: #0f172a;
 }
 
+.sepia {
+  --background: #f7f0df;
+  --foreground: #43372a;
+  --primary: #9a6234;
+  --primary-foreground: #ffffff;
+  --muted: #ede2cc;
+  --muted-foreground: #786854;
+  --card: #fbf6e9;
+  --card-foreground: #43372a;
+  --border: #d8c8aa;
+  --accent: #ede2cc;
+  --accent-foreground: #43372a;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -112,4 +126,3 @@ body {
 .backface-hidden {
   backface-visibility: hidden;
 }
-
