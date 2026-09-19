@@ -18,7 +18,8 @@ if (!existsSync(source)) {
 
 await rm(target, { recursive: true, force: true });
 await mkdir(target, { recursive: true });
-await cp(path.join(source, "build", "pdf.worker.min.mjs"), path.join(target, "pdf.worker.min.mjs"));
+// The legacy worker, matching the legacy build the viewer imports (older browsers).
+await cp(path.join(source, "legacy", "build", "pdf.worker.min.mjs"), path.join(target, "pdf.worker.min.mjs"));
 await cp(path.join(source, "cmaps"), path.join(target, "cmaps"), { recursive: true });
 await cp(path.join(source, "standard_fonts"), path.join(target, "standard_fonts"), { recursive: true });
 console.log("[pdfjs] worker, cmaps and standard fonts copied to public/pdfjs");

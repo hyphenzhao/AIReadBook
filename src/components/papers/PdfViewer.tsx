@@ -128,13 +128,16 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
     setStatus("loading");
 
     (async () => {
-      const pdfjs = await import("pdfjs-dist");
-      const { EventBus, PDFFindController, PDFLinkService, PDFViewer: Viewer } = await import("pdfjs-dist/web/pdf_viewer.mjs");
+      // The legacy build: the standard one needs Promise.withResolvers and other
+      // very recent APIs, and simply throws on a browser a year or two old.
+      const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
+      const { EventBus, PDFFindController, PDFLinkService, PDFViewer: Viewer } = await import("pdfjs-dist/legacy/web/pdf_viewer.mjs");
       if (cancelled || !containerRef.current || !viewerRef.current) return;
 
       // Copied into public/ by scripts/copy-pdfjs-assets.mjs. The character maps
       // are what make Chinese and Japanese PDFs render with their own glyphs.
-      pdfjs.GlobalWorkerOptions.workerSrc = "/pdfjs/pdf.worker.min.mjs";
+      // Versioned, so a browser never pairs a cached worker with a newer library.
+      pdfjs.GlobalWorkerOptions.workerSrc = `/pdfjs/pdf.worker.min.mjs?v=${pdfjs.version}-legacy`;
 
       const eventBus = new EventBus();
       const linkService = new PDFLinkService({ eventBus });
@@ -269,7 +272,9 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
     })().catch((error) => {
       if (cancelled) return;
       console.error("PDF failed to load", error);
-      setErrorText(error?.status === 401 ? "登录已过期，请重新登录" : error?.name === "MissingPDFException" ? "服务器上找不到这个 PDF" : "PDF 无法打开");
+      // The reason goes on screen too: on a phone there is no console to look at.
+      const detail = String(error?.message ?? error ?? "").slice(0, 160);
+      setErrorText(error?.status === 401 ? "登录已过期，请重新登录" : error?.name === "MissingPDFException" ? "服务器上找不到这个 PDF" : `PDF 无法打开${detail ? `（${detail}）` : ""}`);
       setStatus("error");
     });
 
