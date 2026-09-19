@@ -210,7 +210,13 @@ export default function ReadPage() {
     // half height leaves both the answer and the passage in view.
     useUIStore.setState({ aiSheetSnap: "half" });
     requestAnimationFrame(() => {
-      document.querySelector('[data-cited="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
+      // Scroll the reading column only; scrollIntoView would move the whole layout with it.
+      const column = scrollRef.current;
+      const cited = column?.querySelector<HTMLElement>('[data-cited="true"]');
+      if (!column || !cited) return;
+      const offset = cited.getBoundingClientRect().top - column.getBoundingClientRect().top;
+      const visible = column.clientHeight - parseFloat(getComputedStyle(column).paddingBottom || "0");
+      column.scrollTo({ top: column.scrollTop + offset - Math.max(0, (visible - cited.offsetHeight) / 2), behavior: "smooth" });
     });
   }, [passageJump, chapters, currentChapter, content, setChapter, clearPassageJump]);
 

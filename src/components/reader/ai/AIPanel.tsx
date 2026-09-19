@@ -30,7 +30,7 @@ export function AIPanel() {
   }, [jumpToPassage]);
 
   return (
-    <div className="h-full">
+    <div className="flex h-full min-h-0 flex-1 flex-col">
       <AssistantPanel
         context={context}
         mode={aiMode}

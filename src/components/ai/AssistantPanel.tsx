@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useChat } from "@ai-sdk/react";
 import Link from "next/link";
 import {
@@ -76,7 +76,7 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
   const [view, setView] = useState<"chat" | "list">("chat");
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [sessionError, setSessionError] = useState("");
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   const notConfigured = aiSettingsLoaded && !aiSettings.ready;
@@ -137,9 +137,20 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
     inputRef.current?.focus();
   }, [pendingSelection, onSelectionConsumed]);
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages.length, isLoading]);
+  // Keep the newest message in view, following the answer while it streams —
+  // unless the reader has scrolled up to re-read. Only the list itself is
+  // scrolled: scrollIntoView would also move every ancestor, even the
+  // overflow-hidden ones and the page, pushing the panel off the screen.
+  const pinned = useRef(true);
+  const onListScroll = () => {
+    const list = listRef.current;
+    if (list) pinned.current = list.scrollHeight - list.scrollTop - list.clientHeight < 80;
+  };
+  useEffect(() => { pinned.current = true; }, [messages.length, view]);
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (list && pinned.current) list.scrollTop = list.scrollHeight;
+  }, [messages, isLoading, view]);
 
   async function ensureSession(): Promise<string | null> {
     if (activeSessionId) return activeSessionId;
@@ -199,7 +210,7 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
 
   if (view === "list") {
     return (
-      <div className="flex h-full flex-col bg-[var(--background)]">
+      <div className="flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-[var(--background)]">
         <div className="flex items-center justify-between border-b border-[var(--border)] px-2 py-1.5">
           <button onClick={() => setView("chat")} className="flex min-h-9 items-center gap-1 rounded px-2 text-sm hover:bg-[var(--accent)]">
             <ChevronLeft className="h-4 w-4" />对话记录
@@ -208,7 +219,7 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
             <Plus className="h-3.5 w-3.5" />新对话
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-2">
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-2">
           {bookSessions.length === 0 ? (
             <div className="py-12 text-center text-sm text-[var(--muted-foreground)]">
               <MessageSquare className="mx-auto mb-2 h-8 w-8 opacity-50" />
@@ -294,7 +305,7 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
         </div>
       )}
 
-      <div className="flex-1 overflow-y-auto">
+      <div ref={listRef} onScroll={onListScroll} className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
         {mode === "summary" && context?.unitId && (
           <SummaryView
             chapterId={context.unitId}
@@ -341,7 +352,6 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
               {isPaper ? "正在查找依据：当前页 → 全文 → 文献库…" : mode === "summary" ? "正在查阅本章…" : "正在查找依据：本章 → 全书 → 网络…"}
             </p>
           )}
-          <div ref={bottomRef} />
         </div>
       </div>
 

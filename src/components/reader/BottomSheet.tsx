@@ -75,7 +75,8 @@ export function BottomSheet({ snap, onSnapChange, onClose, bottomOffset = "0px",
         >
           <span className="h-1.5 w-10 rounded-full bg-[var(--border)]" />
         </div>
-        <div className="min-h-0 flex-1">{children}</div>
+        {/* A flex column, so the panel is sized by flex rather than by a percentage height. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
       </section>
     </>
   );

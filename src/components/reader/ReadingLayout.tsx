@@ -15,6 +15,10 @@ interface ReadingLayoutProps {
 
 type ResizeTarget = "left" | "right" | "bottom";
 
+// Pinned to the screen rather than sized to it: whatever happens inside, the
+// page itself has nothing to scroll, so the AI panel always ends at the screen's edge.
+const SCREEN = "fixed inset-0 flex overflow-hidden bg-[var(--background)]";
+
 export function ReadingLayout({ leftPanel, centerPanel, rightPanel, mobileBottomOffset = "0px" }: ReadingLayoutProps) {
   const {
     leftPanelOpen, rightPanelOpen, toggleLeftPanel, toggleRightPanel,
@@ -72,7 +76,7 @@ export function ReadingLayout({ leftPanel, centerPanel, rightPanel, mobileBottom
     const reserved = rightPanelOpen ? `${SNAP_HEIGHT.half * 100}dvh` : "0px";
     return (
       <div
-        className="relative flex h-dvh flex-col overflow-hidden bg-[var(--background)]"
+        className={`${SCREEN} flex-col`}
         style={{ "--reader-bottom-inset": `calc(${mobileBottomOffset} + ${reserved})` } as CSSProperties}
       >
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{centerPanel}</div>
@@ -101,21 +105,21 @@ export function ReadingLayout({ leftPanel, centerPanel, rightPanel, mobileBottom
   const leftW = leftPanelOpen ? `${leftPanelWidth * 100}%` : "0px";
   const left = (
     <div className="relative shrink-0 overflow-hidden border-r border-[var(--border)] transition-[width] duration-200" style={{ width: leftW }}>
-      {leftPanelOpen && <div className="h-full w-full overflow-y-auto">{leftPanel}</div>}
+      {leftPanelOpen && <div className="absolute inset-0 overflow-y-auto">{leftPanel}</div>}
       {leftPanelOpen && handle("left", "right-0 top-0 h-full w-1.5 cursor-col-resize")}
     </div>
   );
 
   if (aiPanelPosition === "right") {
     return (
-      <div className="relative flex h-dvh overflow-hidden bg-[var(--background)]">
+      <div className={SCREEN}>
         {left}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{centerPanel}</div>
         <div
           className="relative shrink-0 overflow-hidden border-l border-[var(--border)] transition-[width] duration-200"
           style={{ width: rightPanelOpen ? `${rightPanelWidth * 100}%` : "0px" }}
         >
-          {rightPanelOpen && <div className="h-full w-full overflow-hidden">{rightPanel}</div>}
+          {rightPanelOpen && <div className="absolute inset-0 flex flex-col overflow-hidden">{rightPanel}</div>}
           {rightPanelOpen && handle("right", "left-0 top-0 h-full w-1.5 cursor-col-resize")}
         </div>
       </div>
@@ -123,7 +127,7 @@ export function ReadingLayout({ leftPanel, centerPanel, rightPanel, mobileBottom
   }
 
   return (
-    <div className="flex h-dvh flex-col overflow-hidden bg-[var(--background)]">
+    <div className={`${SCREEN} flex-col`}>
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {left}
         <div className="flex min-w-0 flex-1 flex-col overflow-hidden">{centerPanel}</div>
@@ -133,7 +137,7 @@ export function ReadingLayout({ leftPanel, centerPanel, rightPanel, mobileBottom
         style={{ height: rightPanelOpen ? `min(${aiPanelSize}px, calc(100dvh - 7rem))` : "0px" }}
       >
         {rightPanelOpen && handle("bottom", "left-0 top-0 h-1.5 w-full cursor-row-resize")}
-        {rightPanelOpen && <div className="h-full w-full overflow-hidden">{rightPanel}</div>}
+        {rightPanelOpen && <div className="absolute inset-0 flex flex-col overflow-hidden">{rightPanel}</div>}
       </div>
     </div>
   );
