@@ -117,25 +117,25 @@ export function NodePanel({ nodeId, allNodes, onClose, onSelect, onChanged }: Pr
             <h3 className="mb-1.5 text-xs font-medium text-[var(--muted-foreground)]">出处（{node.mentions.length}）</h3>
             <ul className="space-y-2">
               {node.mentions.map((mention) => {
-                const canJump = mention.bookId && mention.chapterId && mention.charStart !== null;
+                // A book passage jumps to chapter + character range; a paper passage to its PDF page.
+                const href = mention.paperId
+                  ? `/papers/${mention.paperId}${mention.page ? `?page=${mention.page}` : ""}`
+                  : mention.bookId && mention.chapterId && mention.charStart !== null
+                    ? `/read/${mention.bookId}?chapter=${mention.chapterId}&from=${mention.charStart}&to=${mention.charEnd}`
+                    : null;
                 return (
                   <li key={mention.id} className="rounded-md border-l-2 border-[var(--primary)] bg-[var(--accent)] px-2.5 py-2">
                     <p className="text-xs text-[var(--muted-foreground)]">
-                      《{mention.bookTitle}》{mention.chapterLabel ? ` · ${mention.chapterLabel}` : ""}
+                      {mention.paperId
+                        ? `${mention.paperTitle}${mention.page ? ` · 第 ${mention.page} 页` : ""}`
+                        : `《${mention.bookTitle}》${mention.chapterLabel ? ` · ${mention.chapterLabel}` : ""}`}
                     </p>
                     {mention.quote ? (
                       <p className="mt-1"><Quote className="mr-1 inline h-3 w-3 text-[var(--primary)]" />{mention.quote}</p>
-                    ) : (
+                    ) : mention.paperId ? null : (
                       <p className="mt-1 text-xs text-[var(--muted-foreground)]">本章提到了它，但 AI 给出的引句在原文中没有找到。</p>
                     )}
-                    {canJump && (
-                      <Link
-                        href={`/read/${mention.bookId}?chapter=${mention.chapterId}&from=${mention.charStart}&to=${mention.charEnd}`}
-                        className="mt-1 inline-block text-xs text-[var(--primary)] underline"
-                      >
-                        回到原文 →
-                      </Link>
-                    )}
+                    {href && <Link href={href} className="mt-1 inline-block text-xs text-[var(--primary)] underline">回到原文 →</Link>}
                   </li>
                 );
               })}

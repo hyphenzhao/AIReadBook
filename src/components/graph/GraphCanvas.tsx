@@ -7,7 +7,12 @@ import fcose from "cytoscape-fcose";
 cytoscape.use(fcose);
 
 export interface CanvasNode { id: string; label: string; type: string; weight: number }
-export interface CanvasEdge { id: string; source: string; target: string; label: string; weight: number; tone?: "agree" | "contradict" | "neutral" }
+export interface CanvasEdge {
+  id: string; source: string; target: string; label: string; weight: number;
+  tone?: "agree" | "contradict" | "neutral";
+  /** False for symmetric relations (two papers sharing a method): no arrowhead. */
+  directed?: boolean;
+}
 
 /** One colour per node type, readable on both light and dark backgrounds. */
 export const TYPE_COLORS: Record<string, string> = {
@@ -56,7 +61,10 @@ export function GraphCanvas({ nodes, edges, selectedId, onSelectNode, onSelectEd
       ...nodes.map((node) => ({
         data: { ...node, color: TYPE_COLORS[node.type] ?? FALLBACK_COLOR, size: 18 + 34 * Math.sqrt(node.weight / maxWeight) },
       })),
-      ...edges.map((edge) => ({ data: { ...edge, width: Math.min(6, 1 + Math.log2(1 + edge.weight)) }, classes: edge.tone ?? "neutral" })),
+      ...edges.map((edge) => ({
+        data: { ...edge, width: Math.min(6, 1 + Math.log2(1 + edge.weight)) },
+        classes: `${edge.tone ?? "neutral"}${edge.directed === false ? " undirected" : ""}`,
+      })),
     ];
 
     const cy = cytoscape({
@@ -107,6 +115,7 @@ export function GraphCanvas({ nodes, edges, selectedId, onSelectNode, onSelectEd
         },
         { selector: "edge.agree", style: { "line-color": "#2fa37a", "target-arrow-color": "#2fa37a", "line-opacity": 0.8 } },
         { selector: "edge.contradict", style: { "line-color": "#d2475f", "target-arrow-color": "#d2475f", "line-style": "dashed", "line-opacity": 0.85 } },
+        { selector: "edge.undirected", style: { "target-arrow-shape": "none" } },
         { selector: ".faded", style: { opacity: 0.12, "text-opacity": 0 } },
         { selector: "node.focus", style: { "border-width": 3, "border-color": foreground } },
       ],

@@ -2,13 +2,14 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, BookOpen, FileText, FolderOpen, Library, Loader2, Network, Search, Star, Tag, Upload } from "lucide-react";
+import { AlertCircle, BookOpen, Download, FileText, FolderOpen, FolderPlus, Library, Loader2, Network, Plus, Search, Star, Tag, Upload } from "lucide-react";
+import { AddPapersDialog } from "@/components/papers/AddPapersDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { UserMenu } from "@/components/shared/UserMenu";
 import { errorMessage } from "@/lib/api-client-v2";
 import {
-  apiListPapers, apiUploadPaper, STAGE_LABELS, STATUS_LABELS,
+  apiCreatePaperCollection, apiListPapers, apiUploadPaper, paperExportUrl, STAGE_LABELS, STATUS_LABELS,
   type PaperFilters, type PaperLibrary, type PaperStatus, type PaperView,
 } from "@/lib/api-papers";
 
@@ -32,7 +33,19 @@ export default function PapersPage() {
   const [search, setSearch] = useState("");
   const [uploads, setUploads] = useState<UploadItem[]>([]);
   const [dragging, setDragging] = useState(false);
+  const [adding, setAdding] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+
+  async function newCollection() {
+    const name = window.prompt("新集合的名称（例如一个课题、一篇正在写的论文）：")?.trim();
+    if (!name) return;
+    try {
+      await apiCreatePaperCollection(name);
+      await load();
+    } catch (e) {
+      setError(errorMessage(e, "无法创建集合"));
+    }
+  }
 
   const load = useCallback(async () => {
     try {
@@ -107,6 +120,14 @@ export default function PapersPage() {
             </Link>
           </nav>
           <div className="ml-auto flex items-center gap-2">
+            {!!library?.papers.length && (
+              <a href={paperExportUrl({ collectionId: filters.collectionId })} download title="导出 BibTeX" aria-label="导出 BibTeX" className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] hover:bg-[var(--accent)]">
+                <Download className="h-4 w-4" />
+              </a>
+            )}
+            <Button size="sm" variant="outline" className="gap-1" onClick={() => setAdding(true)}>
+              <Plus className="h-4 w-4" /><span className="hidden sm:inline">DOI / BibTeX</span>
+            </Button>
             <Button size="sm" className="gap-1" onClick={() => fileInput.current?.click()}>
               <Upload className="h-4 w-4" /><span className="hidden sm:inline">上传 PDF</span>
             </Button>
@@ -166,6 +187,9 @@ export default function PapersPage() {
                 {library.collections.map((c) => <option key={c.id} value={c.id}>{c.name} ({c.count})</option>)}
               </select>
             )}
+            <button onClick={newCollection} className="flex h-10 shrink-0 items-center gap-1 rounded-md border border-dashed border-[var(--border)] px-2 text-sm text-[var(--muted-foreground)] hover:bg-[var(--accent)]">
+              <FolderPlus className="h-4 w-4" />新集合
+            </button>
             {years.length > 1 && (
               <select
                 aria-label="年份" value={filters.year ?? ""}
@@ -222,6 +246,8 @@ export default function PapersPage() {
           </ul>
         )}
       </main>
+
+      <AddPapersDialog open={adding} onOpenChange={setAdding} onAdded={load} />
 
       {dragging && !!library?.papers.length && (
         <div className="pointer-events-none fixed inset-4 z-30 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--primary)] bg-[var(--primary)]/10 text-lg font-medium text-[var(--primary)]">

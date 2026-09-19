@@ -114,6 +114,81 @@ export async function apiDeletePaperAnnotation(id: number, annotationId: number)
   await apiRequest("DELETE", `/api/papers/${id}/annotations?annotationId=${annotationId}`);
 }
 
+// --- AI reading and relations ---
+export interface AnalysisItem { text: string; quote: string | null; chunkId: number | null; page: number | null; name?: string }
+export interface PaperAnalysisData {
+  researchQuestion: AnalysisItem | null;
+  methods: AnalysisItem[];
+  datasets: AnalysisItem[];
+  findings: AnalysisItem[];
+  limitations: AnalysisItem[];
+  keywords: string[];
+}
+export type PaperLinkType = "SHARED_KEYWORD" | "SHARED_METHOD" | "SHARED_DATASET" | "SIMILAR" | "CITES" | "AGREES" | "CONTRADICTS" | "EXTENDS";
+export interface LinkEvidence {
+  nodes?: { id: number; name: string }[];
+  similarity?: number;
+  citing?: number;
+  cited?: number;
+  explanation?: string;
+  /** paper id → the finding of that paper the relation rests on */
+  findings?: Record<string, string>;
+  note?: string;
+}
+export interface PaperLinkView {
+  id: number;
+  type: PaperLinkType;
+  score: number;
+  origin: "AUTO" | "LLM" | "USER";
+  evidence: LinkEvidence;
+  other: { id: number; title: string; year: number | null; authors: string[] };
+}
+
+export function apiGetPaperAnalysis(id: number): Promise<{ analysis: { data: PaperAnalysisData; model: string; createdAt: string } | null; links: PaperLinkView[] }> {
+  return apiRequest("GET", `/api/papers/${id}/analysis`);
+}
+export function apiReanalyzePaper(id: number): Promise<{ job: { id: number } }> {
+  return apiRequest("POST", `/api/papers/${id}/analysis`, { body: {} });
+}
+
+export interface PaperRelationGraph {
+  papers: { id: number; title: string; year: number | null; authors: string[]; status: PaperStatus }[];
+  links: { id: number; paperAId: number; paperBId: number; type: PaperLinkType; score: number; origin: string; evidence: LinkEvidence }[];
+  collections: { id: number; name: string }[];
+}
+export function apiGetPaperRelations(collectionId?: number): Promise<PaperRelationGraph> {
+  return apiRequest("GET", `/api/papers/links${collectionId ? `?collectionId=${collectionId}` : ""}`);
+}
+export async function apiDismissPaperLink(linkId: number) {
+  await apiRequest("DELETE", `/api/papers/links/${linkId}`);
+}
+export function apiAddPaperLink(data: { paperAId: number; paperBId: number; type: PaperLinkType; note?: string }) {
+  return apiRequest("POST", "/api/papers/links", { body: data });
+}
+
+// --- Import, export, collections ---
+export interface ImportResult { created: number; createdIds: number[]; skipped: number; skippedTitles: string[]; note: string | null }
+export function apiImportPapers(data: { bibtex: string } | { identifier: string }): Promise<ImportResult> {
+  return apiRequest("POST", "/api/papers/import", { body: data });
+}
+export const paperExportUrl = (options: { collectionId?: number; ids?: number[] } = {}) => {
+  const query = new URLSearchParams();
+  if (options.collectionId) query.set("collectionId", String(options.collectionId));
+  if (options.ids?.length) query.set("ids", options.ids.join(","));
+  return `/api/papers/export?${query}`;
+};
+export function apiCreatePaperCollection(name: string): Promise<{ collection: PaperCollectionView }> {
+  return apiRequest("POST", "/api/papers/collections", { body: { name } });
+}
+export async function apiDeletePaperCollection(id: number) {
+  await apiRequest("DELETE", `/api/papers/collections?id=${id}`);
+}
+
+export const LINK_LABELS: Record<PaperLinkType, string> = {
+  AGREES: "结论一致", CONTRADICTS: "结论相左", EXTENDS: "推进 / 延伸", CITES: "引用",
+  SHARED_METHOD: "相同方法", SHARED_DATASET: "相同数据", SHARED_KEYWORD: "共同关键词", SIMILAR: "内容相近",
+};
+
 export const STAGE_LABELS: Record<string, string> = {
   UPLOADED: "等待处理",
   EXTRACTING: "提取文字",

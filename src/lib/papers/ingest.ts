@@ -1,5 +1,7 @@
 import { gzipSync } from "zlib";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { normalizeName } from "@/lib/knowledge/graph-names";
 import { chunkText } from "@/lib/text/chunker";
 import { embeddingModel, embedTexts, vectorToBytes } from "@/lib/embedding/client";
 import { enqueueJob } from "@/lib/jobs/queue";
@@ -9,6 +11,9 @@ import { resolveStored } from "@/lib/papers/storage";
 import { detectSections, findArxivId, findDoi, sectionAt } from "@/lib/papers/structure";
 import { fetchArxiv, fetchCrossref, plausibleAuthors, plausibleTitle, type PaperMetadata } from "@/lib/papers/metadata";
 import { invalidatePaperVectors } from "@/lib/vector/papers";
+import { analyzePaper, mergePaperIntoGraph } from "@/lib/papers/analyze";
+import { computePaperLinks } from "@/lib/papers/links";
+import { LLMConfigError } from "@/lib/ai/user-llm";
 
 const EMBED_GROUP = 64;
 const PAGE_SEPARATOR = "\n\n";
@@ -19,6 +24,42 @@ export function enqueuePaperIngest(paperId: number, userId: number) {
 
 const setStage = (paperId: number, pipelineStage: string, pipelineError: string | null = null) =>
   prisma.paper.update({ where: { id: paperId }, data: { pipelineStage, pipelineError } });
+
+/**
+ * AI reading → paper graph → links to other papers. Also run on its own when
+ * the reader asks for a paper to be re-read (job "analyze_paper").
+ */
+export async function understandPaper(paperId: number, ctx: JobContext): Promise<{ stage: string; note: string | null }> {
+  try {
+    await setStage(paperId, "ANALYZING");
+    await ctx.progress("analyzing", 96);
+    const analysis = await analyzePaper(paperId);
+    if (analysis) await mergePaperIntoGraph(paperId, analysis);
+
+    await setStage(paperId, "LINKING");
+    await ctx.progress("linking", 98);
+    await computePaperLinks(paperId);
+    return { stage: "READY", note: null };
+  } catch (error) {
+    if (error instanceof LLMConfigError) {
+      return { stage: "NEEDS_KEY", note: "还没有配置 AI，所以没有做精读和文献关联。配置后在文献的「精读」页点「重新精读」即可。" };
+    }
+    console.error(`[papers] understanding paper ${paperId} failed`, error);
+    return { stage: "READY", note: "AI 精读这一步没有成功，可以在「精读」页重试。阅读、检索和提问不受影响。" };
+  }
+}
+
+export function enqueuePaperAnalysis(paperId: number, userId: number) {
+  return enqueueJob("analyze_paper", { paperId }, { userId, dedupeKey: `analyze_paper:${paperId}`, maxAttempts: 2 });
+}
+
+/** Job "analyze_paper": re-read one paper and refresh its links. */
+export async function reanalyzePaper(paperId: number, ctx: JobContext) {
+  const exists = await prisma.paper.findUnique({ where: { id: paperId }, select: { id: true } });
+  if (!exists) return;
+  const result = await understandPaper(paperId, ctx);
+  await setStage(paperId, result.stage, result.note);
+}
 
 /** The title as a reader would recognise it: the tallest text on the first page. */
 function titleFromFirstPage(page: ExtractedPageWithOcr | undefined) {
@@ -94,6 +135,36 @@ export async function ingestPaper(paperId: number, ctx: JobContext) {
       ? fullText.slice(abstractSection.start + abstractSection.title.length, abstractEnd ?? abstractSection.start + 3000).trim().slice(0, 3000)
       : null;
 
+    // Was this paper already imported from BibTeX or by DOI, waiting for its PDF?
+    // Then that entry — with whatever tags, collections and notes it was given —
+    // is the one to keep: its record moves onto this paper and it goes away.
+    const pdfTitle = looked.title ?? plausibleTitle(info.title) ?? titleFromFirstPage(pages[0]);
+    const waiting = await prisma.paper.findMany({
+      where: { userId, pipelineStage: "NO_FILE", id: { not: paperId } },
+      include: { tags: true, collections: true },
+    });
+    const twin = waiting.find((other) =>
+      (doi && other.doi?.toLowerCase() === doi) ||
+      (arxivId && other.arxivId?.replace(/v\d+$/, "") === arxivId.replace(/v\d+$/, "")) ||
+      (pdfTitle && normalizeName(other.title).length >= 20 && normalizeName(other.title) === normalizeName(pdfTitle)),
+    );
+    if (twin) {
+      await prisma.$transaction([
+        prisma.paper.update({
+          where: { id: paperId },
+          data: {
+            title: twin.title, authors: twin.authors as Prisma.InputJsonValue, year: twin.year, venue: twin.venue,
+            doi: twin.doi ?? doi, arxivId: twin.arxivId ?? arxivId, abstract: twin.abstract, notes: twin.notes,
+            status: twin.status, rating: twin.rating,
+          },
+        }),
+        prisma.paperTag.createMany({ data: twin.tags.map((t) => ({ paperId, tagId: t.tagId })), skipDuplicates: true }),
+        prisma.paperCollectionItem.createMany({ data: twin.collections.map((c) => ({ paperId, collectionId: c.collectionId })), skipDuplicates: true }),
+        prisma.paper.delete({ where: { id: twin.id } }),
+      ]);
+      Object.assign(paper, { title: twin.title, authors: twin.authors, year: twin.year, venue: twin.venue, abstract: twin.abstract });
+    }
+
     // Only fill what is still the upload-time placeholder; never overwrite the reader's edits.
     const placeholderTitle = paper.title === paper.file.originalName.replace(/\.pdf$/i, "");
     const authors = Array.isArray(paper.authors) ? (paper.authors as string[]) : [];
@@ -159,8 +230,13 @@ export async function ingestPaper(paperId: number, ctx: JobContext) {
       await ctx.progress("embedding", 50 + ((i + group.length) / pending.length) * 45);
     }
     invalidatePaperVectors(userId);
+    const embedNote = embedded ? null : "向量服务不可用：目前只能按关键词检索。";
 
-    await setStage(paperId, "READY", embedded ? null : "向量服务不可用：目前只能按关键词检索，稍后会自动补上语义检索。");
+    // 5–6. The structured reading and the links to other papers. From here on
+    //      nothing may fail the job: the paper is already readable, searchable
+    //      and open to questions.
+    const understood = await understandPaper(paperId, ctx);
+    await setStage(paperId, understood.stage, [embedNote, understood.note].filter(Boolean).join(" ") || null);
     await ctx.progress(`done: ${pages.length} pages, ${chunks.length} chunks`, 100);
   } catch (error) {
     await setStage(paperId, "FAILED", (error instanceof Error ? error.message : String(error)).slice(0, 1000)).catch(() => {});

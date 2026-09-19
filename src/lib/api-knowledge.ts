@@ -59,7 +59,11 @@ export async function waitForJob(id: number, onUpdate?: (job: JobView) => void, 
 }
 
 // --- Knowledge graph ---
-export interface GraphNodeView { id: number; type: string; name: string; description: string | null; mentions: number; bookIds: number[] }
+export interface GraphNodeView {
+  id: number; type: string; name: string; description: string | null; mentions: number; bookIds: number[];
+  /** Set on the node that stands for a paper itself. */
+  paperId?: number | null;
+}
 export interface GraphEdgeView { id: number; srcId: number; dstId: number; relation: string; weight: number }
 export interface GraphView {
   nodes: GraphNodeView[];
@@ -78,6 +82,10 @@ export interface GraphMentionView {
   chapterLabel: string | null;
   charStart: number | null;
   charEnd: number | null;
+  /** Paper-graph mentions: the paper and the PDF page. */
+  paperId?: number | null;
+  paperTitle?: string | null;
+  page?: number | null;
 }
 export interface GraphNodeDetail {
   id: number;

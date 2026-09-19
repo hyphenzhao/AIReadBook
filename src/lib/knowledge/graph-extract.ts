@@ -51,7 +51,16 @@ export function enqueueGraphExtraction(chapterId: number, userId: number) {
   return enqueueJob("graph_extract", { chapterId }, { userId, dedupeKey: `graph_extract:${chapterId}`, maxAttempts: 2 });
 }
 
-interface Candidate { id: number; vec: Float32Array }
+export interface Candidate { id: number; vec: Float32Array }
+
+/** Nodes of one type that can be matched by embedding, loaded once per extraction. */
+export async function loadCandidates(userId: number, scope: GraphScope, type: string): Promise<Candidate[]> {
+  const rows = await prisma.graphNode.findMany({
+    where: { userId, scope, type, vec: { not: null } },
+    select: { id: true, vec: true },
+  });
+  return rows.map((row) => ({ id: row.id, vec: bytesToVector(row.vec!) }));
+}
 
 /**
  * Finds the node an extracted entity refers to, or creates one. Matching never
@@ -59,7 +68,7 @@ interface Candidate { id: number; vec: Float32Array }
  * embedding similarity ≥ AUTO_MERGE_SIMILARITY. Anything less certain becomes
  * a new node: a duplicate can be merged by hand, a wrong merge corrupts the graph.
  */
-async function resolveNode(
+export async function resolveNode(
   key: { userId: number; scope: GraphScope; type: string },
   entity: { name: string; description: string; aliases: string[] },
   vector: Float32Array | null,
@@ -153,11 +162,7 @@ export async function extractChapterGraph(chapterId: number, ctx: JobContext) {
   // Candidates for similarity merging, loaded once per type.
   const candidatesByType = new Map<string, Candidate[]>();
   for (const type of new Set(entities.map((entity) => entity.type))) {
-    const rows = await prisma.graphNode.findMany({
-      where: { userId, scope, type, vec: { not: null } },
-      select: { id: true, vec: true },
-    });
-    candidatesByType.set(type, rows.map((row) => ({ id: row.id, vec: bytesToVector(row.vec!) })));
+    candidatesByType.set(type, await loadCandidates(userId, scope, type));
   }
 
   const mention = (quote: string) => {

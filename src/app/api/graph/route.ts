@@ -20,7 +20,7 @@ export async function GET(req: Request) {
     const nodes = await prisma.graphNode.findMany({
       where: { userId, scope, ...(byBook ? { mentions: { some: { bookId } } } : {}) },
       select: {
-        id: true, type: true, name: true, description: true,
+        id: true, type: true, name: true, description: true, paperId: true,
         _count: { select: { mentions: true, outEdges: true, inEdges: true } },
         mentions: { select: { bookId: true }, distinct: ["bookId"] },
       },
@@ -44,6 +44,8 @@ export async function GET(req: Request) {
     return Response.json({
       nodes: ranked.map(({ node }) => ({
         id: node.id, type: node.type, name: node.name, description: node.description,
+        // Set on the node that stands for a paper itself.
+        paperId: node.paperId,
         mentions: node._count.mentions,
         bookIds: node.mentions.map((m) => m.bookId).filter((id): id is number => id !== null),
       })),

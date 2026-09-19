@@ -1,16 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Highlighter, Info, List, Save, Star, Trash2 } from "lucide-react";
+import { Highlighter, Info, List, Save, Sparkles, Star, Trash2 } from "lucide-react";
+import { PaperInsights } from "@/components/papers/PaperInsights";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { errorMessage } from "@/lib/api-client-v2";
 import {
-  apiUpdatePaper, STAGE_LABELS, STATUS_LABELS,
-  type PaperAnnotationView, type PaperStatus, type PaperView,
+  apiGetPaperRelations, apiUpdatePaper, STAGE_LABELS, STATUS_LABELS,
+  type PaperAnnotationView, type PaperCollectionView, type PaperStatus, type PaperView,
 } from "@/lib/api-papers";
 
-type Tab = "outline" | "notes" | "info";
+type Tab = "insights" | "outline" | "notes" | "info";
 
 interface Props {
   paper: PaperView;
@@ -27,6 +28,7 @@ interface Props {
 export function PaperSidePanel({ paper, outline, annotations, initialTab = "outline", onGoToPage, onShowAnnotation, onDeleteAnnotation, onPaperChange }: Props) {
   const [tab, setTab] = useState<Tab>(initialTab);
   const tabs: { id: Tab; label: string; icon: typeof List }[] = [
+    { id: "insights", label: "精读", icon: Sparkles },
     { id: "outline", label: "大纲", icon: List },
     { id: "notes", label: `批注${annotations.length ? ` ${annotations.length}` : ""}`, icon: Highlighter },
     { id: "info", label: "信息", icon: Info },
@@ -50,6 +52,8 @@ export function PaperSidePanel({ paper, outline, annotations, initialTab = "outl
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
+        {tab === "insights" && <PaperInsights paper={paper} onGoToPage={onGoToPage} />}
+
         {tab === "outline" && (
           outline.length ? (
             <ul className="p-1.5">
@@ -106,6 +110,8 @@ function PaperInfoForm({ paper, onPaperChange }: { paper: PaperView; onPaperChan
   const [notes, setNotes] = useState(paper.notes ?? "");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<{ ok: boolean; text: string } | null>(null);
+  const [collections, setCollections] = useState<PaperCollectionView[]>([]);
+  useEffect(() => { apiGetPaperRelations().then((data) => setCollections(data.collections.map((c) => ({ ...c, parentId: null, count: 0 })))).catch(() => {}); }, []);
 
   // The pipeline fills in the title and authors a few seconds after upload;
   // show them, unless the reader has started editing.
@@ -160,6 +166,28 @@ function PaperInfoForm({ paper, onPaperChange }: { paper: PaperView; onPaperChan
           ))}
         </div>
       </div>
+
+      {collections.length > 0 && (
+        <div>
+          <span className={label}>所属集合</span>
+          <div className="flex flex-wrap gap-1.5">
+            {collections.map((collection) => {
+              const member = paper.collectionIds.includes(collection.id);
+              return (
+                <button
+                  key={collection.id}
+                  disabled={busy}
+                  aria-pressed={member}
+                  onClick={() => patch({ collectionIds: member ? paper.collectionIds.filter((id) => id !== collection.id) : [...paper.collectionIds, collection.id] }, true)}
+                  className={`min-h-8 rounded-full border px-3 text-xs ${member ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}
+                >
+                  {collection.name}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div><label htmlFor="pi-title" className={label}>标题</label><textarea id="pi-title" rows={3} value={title} onChange={(e) => edit(setTitle)(e.target.value)} className="w-full rounded-md border border-[var(--border)] bg-transparent px-2 py-1.5 text-sm" /></div>
       <div><label htmlFor="pi-authors" className={label}>作者（用分号分隔）</label><Input id="pi-authors" value={authors} onChange={(e) => edit(setAuthors)(e.target.value)} /></div>
