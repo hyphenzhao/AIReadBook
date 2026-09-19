@@ -136,7 +136,7 @@ export default function KnowledgePage() {
                 onClick={() => setTypeFilter(typeFilter === type ? null : type)}
                 aria-pressed={typeFilter === type}
                 className={`flex min-h-9 items-center gap-1 rounded-lg border px-3 text-sm transition-colors ${
-                  typeFilter === type ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] hover:bg-[var(--accent)]"
+                  typeFilter === type ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:bg-[var(--accent)]"
                 }`}
               >
                 {info && <info.icon className="h-3.5 w-3.5" />}{info?.label ?? type} ({count})
@@ -189,7 +189,7 @@ export default function KnowledgePage() {
           <DialogContent className="max-h-[85dvh] overflow-y-auto" aria-describedby={undefined}>
             <DialogHeader>
               <p className="flex flex-wrap gap-2 text-xs">
-                <span className="rounded bg-[var(--primary)]/10 px-2 py-0.5 text-[var(--primary)]">{TYPE_LABELS[selected.cardType]?.label ?? selected.cardType}</span>
+                <span className="rounded bg-[var(--primary-soft)] px-2 py-0.5 text-[var(--primary)]">{TYPE_LABELS[selected.cardType]?.label ?? selected.cardType}</span>
                 <span className="rounded bg-[var(--accent)] px-2 py-0.5">{DIFFICULTY_LABELS[selected.difficulty] ?? selected.difficulty}</span>
                 {selected.chapterLabel && <span className="rounded bg-[var(--accent)] px-2 py-0.5">{selected.chapterLabel}</span>}
               </p>

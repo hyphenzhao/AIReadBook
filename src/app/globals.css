@@ -48,6 +48,11 @@
   --foreground: #0f172a;
   --primary: #6366f1;
   --primary-foreground: #ffffff;
+  /* Tints of the primary as plain colours. `bg-[var(--primary)]/10` relies on
+     color-mix(); where that is missing it falls back to the SOLID primary, and
+     primary-coloured text on it disappears. */
+  --primary-soft: #eff0fe;
+  --primary-border: #c8c9fa;
   --muted: #f1f5f9;
   --muted-foreground: #64748b;
   --card: #ffffff;
@@ -64,6 +69,8 @@
   --foreground: #f8fafc;
   --primary: #818cf8;
   --primary-foreground: #0f172a;
+  --primary-soft: #1d2543;
+  --primary-border: #3d467c;
   --muted: #1e293b;
   --muted-foreground: #94a3b8;
   --card: #1e293b;
@@ -80,6 +87,8 @@
   --foreground: #43372a;
   --primary: #9a6234;
   --primary-foreground: #ffffff;
+  --primary-soft: #e9dbc5;
+  --primary-border: #d6bea3;
   --muted: #ede2cc;
   --muted-foreground: #786854;
   --card: #fbf6e9;

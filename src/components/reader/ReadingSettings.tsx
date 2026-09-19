@@ -37,7 +37,7 @@ export function ReadingSettings() {
   const step = "flex h-10 w-10 items-center justify-center rounded-md border border-[var(--border)] hover:bg-[var(--accent)] disabled:opacity-40";
   const choice = (active: boolean) =>
     `flex min-h-10 flex-1 items-center justify-center gap-1.5 rounded-md border px-2 text-sm ${
-      active ? "border-[var(--primary)] bg-[var(--primary)]/10 font-medium" : "border-[var(--border)] hover:bg-[var(--accent)]"
+      active ? "border-[var(--primary)] bg-[var(--primary-soft)] font-medium" : "border-[var(--border)] hover:bg-[var(--accent)]"
     }`;
 
   return (

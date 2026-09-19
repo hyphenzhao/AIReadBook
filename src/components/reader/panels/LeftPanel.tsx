@@ -68,7 +68,7 @@ export function LeftPanel() {
                 onClick={() => setChapter(ch)}
                 className={`w-full rounded px-2 py-1.5 text-left text-sm transition-colors ${
                   ch.id === currentChapter?.id
-                    ? "bg-[var(--primary)]/10 font-medium text-[var(--primary)]"
+                    ? "bg-[var(--primary-soft)] font-medium text-[var(--primary)]"
                     : "hover:bg-[var(--accent)] text-[var(--foreground)]"
                 }`}
               >

@@ -41,7 +41,7 @@ export function CitationMarkdown({ content, sources = [], onCite, currentPaperId
                 ? `${currentPaperId && source.paperId !== currentPaperId ? `${source.paperTitle?.slice(0, 14)}… ` : ""}p.${source.page}`
                 : source.chapterTitle || `第${(source.chapterIndex ?? 0) + 1}章`;
             const className =
-              "not-prose mx-0.5 inline-flex max-w-[12rem] cursor-pointer items-center gap-1 truncate rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 align-baseline text-[11px] font-normal text-[var(--primary)] no-underline hover:bg-[var(--primary)]/10";
+              "not-prose mx-0.5 inline-flex max-w-[12rem] cursor-pointer items-center gap-1 truncate rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 align-baseline text-[11px] font-normal text-[var(--primary)] no-underline hover:bg-[var(--primary-soft)]";
             if (source.kind === "web") {
               return <a href={source.url} target="_blank" rel="noreferrer noopener" title={source.title} className={className}>↗ {label}</a>;
             }

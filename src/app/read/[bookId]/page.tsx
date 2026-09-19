@@ -318,7 +318,7 @@ export default function ReadPage() {
                           <p
                             key={i}
                             data-cited={cited || undefined}
-                            className={`-mx-2 rounded px-2 leading-relaxed transition-colors duration-700 ${cited ? "bg-[var(--primary)]/15" : ""}`}
+                            className={`-mx-2 rounded px-2 leading-relaxed transition-colors duration-700 ${cited ? "bg-[var(--primary-soft)]" : ""}`}
                           >
                             <HighlightedText text={para.text} annotations={bookAnnotations} />
                           </p>

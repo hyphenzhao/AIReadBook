@@ -43,7 +43,7 @@ export default function MindMapsPage() {
                 onClick={() => setSelectedBookId(b.id)}
                 className={`rounded-lg border px-3 py-1.5 text-sm transition-colors ${
                   selectedBookId === b.id
-                    ? "border-[var(--primary)] bg-[var(--primary)]/10"
+                    ? "border-[var(--primary)] bg-[var(--primary-soft)]"
                     : "border-[var(--border)] hover:bg-[var(--accent)]"
                 }`}
               >

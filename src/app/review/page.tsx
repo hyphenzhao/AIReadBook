@@ -131,7 +131,7 @@ export default function ReviewPage() {
               }`}
             >
               <div className="mb-4 flex items-center gap-2">
-                <span className="rounded bg-[var(--primary)]/10 px-2 py-0.5 text-xs text-[var(--primary)]">
+                <span className="rounded bg-[var(--primary-soft)] px-2 py-0.5 text-xs text-[var(--primary)]">
                   {currentCard.sourceType === "annotation" ? "批注" : currentCard.sourceType === "knowledge_card" ? "知识点" : "手动"}
                 </span>
                 {currentCard.tags.map((t) => (
@@ -148,7 +148,7 @@ export default function ReviewPage() {
 
             {/* Back */}
             <div
-              className={`rounded-xl border-2 border-[var(--primary)]/30 bg-[var(--card)] p-8 ${
+              className={`rounded-xl border-2 border-[var(--primary-border)] bg-[var(--card)] p-8 ${
                 !isFlipped ? "invisible" : ""
               }`}
             >

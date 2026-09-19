@@ -148,7 +148,7 @@ function PaperInfoForm({ paper, onPaperChange }: { paper: PaperView; onPaperChan
               disabled={busy}
               onClick={() => patch({ status }, true)}
               aria-pressed={paper.status === status}
-              className={`min-h-9 flex-1 rounded-md border text-sm ${paper.status === status ? "border-[var(--primary)] bg-[var(--primary)]/10 font-medium" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}
+              className={`min-h-9 flex-1 rounded-md border text-sm ${paper.status === status ? "border-[var(--primary)] bg-[var(--primary-soft)] font-medium" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}
             >
               {STATUS_LABELS[status]}
             </button>
@@ -179,7 +179,7 @@ function PaperInfoForm({ paper, onPaperChange }: { paper: PaperView; onPaperChan
                   disabled={busy}
                   aria-pressed={member}
                   onClick={() => patch({ collectionIds: member ? paper.collectionIds.filter((id) => id !== collection.id) : [...paper.collectionIds, collection.id] }, true)}
-                  className={`min-h-8 rounded-full border px-3 text-xs ${member ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}
+                  className={`min-h-8 rounded-full border px-3 text-xs ${member ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:bg-[var(--accent)]"}`}
                 >
                   {collection.name}
                 </button>

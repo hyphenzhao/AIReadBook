@@ -370,7 +370,7 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
               onClick={() => setWeb(webMode.next)}
               title={webMode.title}
               className={`ml-auto flex min-h-7 shrink-0 items-center gap-1 rounded-full border px-2 ${
-                web === "off" ? "border-[var(--border)]" : "border-[var(--primary)]/40 text-[var(--primary)]"
+                web === "off" ? "border-[var(--border)]" : "border-[var(--primary-border)] text-[var(--primary)]"
               }`}
             >
               <Globe className="h-3 w-3" />{webMode.label}

@@ -211,7 +211,7 @@ export default function PapersPage() {
                 onClick={() => setFilters({ ...filters, tagId: filters.tagId === tag.id ? undefined : tag.id })}
                 aria-pressed={filters.tagId === tag.id}
                 className={`flex min-h-8 shrink-0 items-center gap-1 rounded-full border px-3 text-xs ${
-                  filters.tagId === tag.id ? "border-[var(--primary)] bg-[var(--primary)]/10" : "border-[var(--border)] hover:bg-[var(--accent)]"
+                  filters.tagId === tag.id ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)] hover:bg-[var(--accent)]"
                 }`}
               >
                 <Tag className="h-3 w-3" />{tag.name}<span className="text-[var(--muted-foreground)]">{tag.count}</span>
@@ -223,7 +223,7 @@ export default function PapersPage() {
         {library === null && !error ? (
           <p className="flex items-center justify-center gap-2 py-24 text-sm text-[var(--muted-foreground)]"><Loader2 className="h-4 w-4 animate-spin" />加载中…</p>
         ) : library && library.papers.length === 0 ? (
-          <div className={`rounded-xl border-2 border-dashed px-6 py-16 text-center ${dragging ? "border-[var(--primary)] bg-[var(--primary)]/5" : "border-[var(--border)]"}`}>
+          <div className={`rounded-xl border-2 border-dashed px-6 py-16 text-center ${dragging ? "border-[var(--primary)] bg-[var(--primary-soft)]" : "border-[var(--border)]"}`}>
             {filtered ? (
               <>
                 <FolderOpen className="mx-auto mb-3 h-10 w-10 text-[var(--muted-foreground)]" />
@@ -250,7 +250,7 @@ export default function PapersPage() {
       <AddPapersDialog open={adding} onOpenChange={setAdding} onAdded={load} />
 
       {dragging && !!library?.papers.length && (
-        <div className="pointer-events-none fixed inset-4 z-30 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--primary)] bg-[var(--primary)]/10 text-lg font-medium text-[var(--primary)]">
+        <div className="pointer-events-none fixed inset-4 z-30 flex items-center justify-center rounded-2xl border-2 border-dashed border-[var(--primary)] bg-[var(--primary-soft)] text-lg font-medium text-[var(--primary)]">
           松手即可上传
         </div>
       )}
@@ -276,7 +276,7 @@ function PaperRow({ paper }: { paper: PaperView }) {
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
               <span className={`rounded px-1.5 py-0.5 ${STATUS_STYLE[paper.status]}`}>{STATUS_LABELS[paper.status]}</span>
               {paper.processing && (
-                <span className="flex items-center gap-1 rounded bg-[var(--primary)]/10 px-1.5 py-0.5 text-[var(--primary)]">
+                <span className="flex items-center gap-1 rounded bg-[var(--primary-soft)] px-1.5 py-0.5 text-[var(--primary)]">
                   <Loader2 className="h-3 w-3 animate-spin" />{STAGE_LABELS[paper.stage] ?? paper.stage}
                 </span>
               )}

@@ -86,7 +86,7 @@ export default function ImportPage() {
           }}
           className={`flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-16 transition-colors ${
             dragOver
-              ? "border-[var(--primary)] bg-[var(--primary)]/5"
+              ? "border-[var(--primary)] bg-[var(--primary-soft)]"
               : "border-[var(--border)]"
           } ${done ? "border-green-400 bg-green-50 dark:bg-green-950/20" : ""}`}
         >

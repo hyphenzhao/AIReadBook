@@ -93,7 +93,7 @@ export function UserManagement() {
                   <p className="flex flex-wrap items-center gap-2 font-medium">
                     <span className="truncate">{user.name}</span>
                     {user.role === "ADMIN" && (
-                      <span className="inline-flex items-center gap-1 rounded bg-[var(--primary)]/10 px-1.5 py-0.5 text-xs text-[var(--primary)]">
+                      <span className="inline-flex items-center gap-1 rounded bg-[var(--primary-soft)] px-1.5 py-0.5 text-xs text-[var(--primary)]">
                         <ShieldCheck className="h-3 w-3" />管理员
                       </span>
                     )}
