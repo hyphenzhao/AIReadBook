@@ -215,8 +215,14 @@ export default function PaperReaderPage() {
             <div className="min-h-0 flex-1 pb-[var(--reader-bottom-inset,0px)]">
               {!paper.hasFile ? (
                 <div className="flex h-full flex-col items-center justify-center gap-2 px-6 text-center text-sm text-[var(--muted-foreground)]">
-                  <p>这条文献还没有 PDF。</p>
-                  <p>在文献库页面上传对应的 PDF，就会自动挂接到这一条。</p>
+                  {paper.stage === "FETCHING" ? (
+                    <p>正在后台从 arXiv 下载这篇的 PDF，下载完会自动打开。网络慢时可能需要几分钟。</p>
+                  ) : (
+                    <>
+                      <p>这条文献还没有 PDF。{paper.stageError}</p>
+                      <p>在文献库页面上传对应的 PDF，会按 DOI 或标题自动挂接到这一条。</p>
+                    </>
+                  )}
                 </div>
               ) : initial === undefined ? null : (
                 <PdfViewer

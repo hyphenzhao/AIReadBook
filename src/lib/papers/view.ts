@@ -13,7 +13,7 @@ export const PAPER_SELECT = {
 type PaperRow = Prisma.PaperGetPayload<{ select: typeof PAPER_SELECT }>;
 
 /** Stages during which the pipeline is still working on the paper. */
-export const BUSY_STAGES = ["UPLOADED", "EXTRACTING", "CHUNKING", "EMBEDDING", "ANALYZING", "LINKING"];
+export const BUSY_STAGES = ["FETCHING", "UPLOADED", "EXTRACTING", "CHUNKING", "EMBEDDING", "ANALYZING", "LINKING"];
 
 export function paperView(paper: PaperRow) {
   return {

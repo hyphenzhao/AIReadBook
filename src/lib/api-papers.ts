@@ -190,6 +190,7 @@ export const LINK_LABELS: Record<PaperLinkType, string> = {
 };
 
 export const STAGE_LABELS: Record<string, string> = {
+  FETCHING: "正在下载 PDF",
   UPLOADED: "等待处理",
   EXTRACTING: "提取文字",
   CHUNKING: "分段",

@@ -3,8 +3,7 @@ import { requireSessionUserId, sessionError } from "@/lib/auth-session";
 import { parseBibtex } from "@/lib/papers/bibtex";
 import { arxivPdfUrl, fetchArxiv, fetchCrossref, type PaperMetadata } from "@/lib/papers/metadata";
 import { findArxivId, findDoi } from "@/lib/papers/structure";
-import { storePdfUpload } from "@/lib/papers/storage";
-import { enqueuePaperIngest } from "@/lib/papers/ingest";
+import { enqueuePdfFetch } from "@/lib/papers/fetch-pdf";
 import { normalizeName } from "@/lib/knowledge/graph-names";
 
 export const maxDuration = 120;
@@ -81,25 +80,13 @@ export async function POST(req: Request) {
       byTitle.set(normalizeName(item.title), paper.id);
     }
 
-    // arXiv is open access: fetch the PDF and send it down the normal pipeline.
+    // arXiv is open access: fetch the PDF in the background (the link can take
+    // minutes) and send it down the normal pipeline when it arrives.
     let pdfNote: string | null = null;
     if (arxivToFetch && created.length === 1) {
-      try {
-        const res = await fetch(arxivPdfUrl(arxivToFetch), { signal: AbortSignal.timeout(60_000), redirect: "follow" });
-        if (!res.ok || !res.body) throw new Error(`arXiv returned ${res.status}`);
-        const stored = await storePdfUpload(userId, res.body as ReadableStream<Uint8Array>);
-        const clash = await prisma.paperFile.findUnique({ where: { userId_sha256: { userId, sha256: stored.sha256 } } });
-        if (!clash) {
-          await prisma.paperFile.create({
-            data: { paperId: created[0], userId, sha256: stored.sha256, bytes: stored.bytes, path: stored.path, originalName: `arXiv-${arxivToFetch}.pdf` },
-          });
-          await prisma.paper.update({ where: { id: created[0] }, data: { pipelineStage: "UPLOADED" } });
-          await enqueuePaperIngest(created[0], userId);
-        }
-      } catch (error) {
-        console.warn("[papers] could not fetch the arXiv PDF", (error as Error).message);
-        pdfNote = "条目已添加，但 PDF 没能从 arXiv 下载下来，可以稍后手动上传。";
-      }
+      await prisma.paper.update({ where: { id: created[0] }, data: { pipelineStage: "FETCHING" } });
+      await enqueuePdfFetch(created[0], userId, arxivPdfUrl(arxivToFetch));
+      pdfNote = "正在后台从 arXiv 下载 PDF，下载完会自动处理；网络慢时可能需要几分钟。";
     }
 
     return Response.json({ created: created.length, createdIds: created, skipped: skipped.length, skippedTitles: skipped.slice(0, 20), note: pdfNote }, { status: 201 });
