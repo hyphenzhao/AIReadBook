@@ -1,63 +1,35 @@
 "use client";
 
-import { BookOpen, MessageCircle, Brain, Library, PanelBottom, PanelRight } from "lucide-react";
+import { Brain, Library, List, Sparkles } from "lucide-react";
 import Link from "next/link";
 import { useUIStore } from "@/stores/ui-store";
 import { useReadingStore } from "@/stores/reading-store";
 
+/** Space the tab bar takes at the bottom of a phone screen, home indicator included. */
+export const MOBILE_NAV_HEIGHT = "calc(3.5rem + env(safe-area-inset-bottom, 0px))";
+
+const item = "flex h-14 flex-1 flex-col items-center justify-center gap-0.5 text-[11px]";
+
 export function MobileNav() {
   const bookId = useReadingStore((s) => s.currentBook?.id);
-  const aiPanelPosition = useUIStore((s) => s.aiPanelPosition);
-  const toggleAiPanelPosition = useUIStore((s) => s.toggleAiPanelPosition);
+  const { leftPanelOpen, rightPanelOpen, toggleLeftPanel, toggleRightPanel } = useUIStore();
+  const tone = (active: boolean) => (active ? "text-[var(--primary)]" : "text-[var(--muted-foreground)]");
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 flex h-14 items-center justify-around border-t border-[var(--border)] bg-[var(--background)] safe-area-bottom md:hidden">
-      <Link
-        href="/library"
-        className="flex flex-col items-center gap-0.5 text-xs text-[var(--muted-foreground)]"
-      >
-        <Library className="h-5 w-5" />
-        <span>书库</span>
+    <nav className="safe-area-bottom fixed inset-x-0 bottom-0 z-[45] flex border-t border-[var(--border)] bg-[var(--background)] md:hidden">
+      <Link href="/library" className={`${item} ${tone(false)}`}>
+        <Library className="h-5 w-5" />书库
       </Link>
-
-      <button
-        onClick={() => useUIStore.getState().toggleLeftPanel()}
-        className="flex flex-col items-center gap-0.5 text-xs text-[var(--muted-foreground)]"
-      >
-        <BookOpen className="h-5 w-5" />
-        <span>目录</span>
+      <button onClick={toggleLeftPanel} aria-pressed={leftPanelOpen} className={`${item} ${tone(leftPanelOpen)}`}>
+        <List className="h-5 w-5" />目录
       </button>
-
       {bookId && (
-        <Link
-          href={`/read/${bookId}/knowledge`}
-          className="flex flex-col items-center gap-0.5 text-xs text-[var(--muted-foreground)]"
-        >
-          <Brain className="h-5 w-5" />
-          <span>知识</span>
+        <Link href={`/read/${bookId}/knowledge`} className={`${item} ${tone(false)}`}>
+          <Brain className="h-5 w-5" />知识
         </Link>
       )}
-
-      <button
-        onClick={toggleAiPanelPosition}
-        className="flex flex-col items-center gap-0.5 text-xs text-[var(--muted-foreground)]"
-        title={aiPanelPosition === "right" ? "将 AI 助手移到底部" : "将 AI 助手移到右侧"}
-        aria-label={aiPanelPosition === "right" ? "将 AI 助手移到底部" : "将 AI 助手移到右侧"}
-      >
-        {aiPanelPosition === "right" ? (
-          <PanelBottom className="h-5 w-5" />
-        ) : (
-          <PanelRight className="h-5 w-5 text-[var(--primary)]" />
-        )}
-        <span>{aiPanelPosition === "right" ? "下置 AI" : "右置 AI"}</span>
-      </button>
-
-      <button
-        onClick={() => useUIStore.getState().toggleRightPanel()}
-        className="flex flex-col items-center gap-0.5 text-xs text-[var(--muted-foreground)]"
-      >
-        <MessageCircle className="h-5 w-5" />
-        <span>AI</span>
+      <button onClick={toggleRightPanel} aria-pressed={rightPanelOpen} className={`${item} ${tone(rightPanelOpen)}`}>
+        <Sparkles className="h-5 w-5" />问 AI
       </button>
     </nav>
   );

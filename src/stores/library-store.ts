@@ -4,7 +4,8 @@ import * as api from "@/lib/api-client-v2";
 interface StoredBook {
   id: string; title: string; author: string | null; coverUrl: string | null;
   language: string; totalChapters: number;
-  chapters: { id: string; index: number; title: string; plainText: string; wordCount: number }[];
+  /** `plainText` is absent until loadBookText() has run for this book. */
+  chapters: { id: string; index: number; title: string; plainText?: string; wordCount: number }[];
   metadata: Record<string, unknown>; uploadedAt: string;
 }
 
@@ -16,6 +17,8 @@ interface LibraryState {
   removeBook: (id: string) => Promise<void>;
   updateCover: (id: string, coverUrl: string) => Promise<void>;
   getBook: (id: string) => StoredBook | undefined;
+  /** Fetches a book's chapter text once; later calls are no-ops. Throws ApiError on failure. */
+  loadBookText: (id: string) => Promise<void>;
 }
 
 export const useLibraryStore = create<LibraryState>()((set, get) => ({
@@ -77,4 +80,11 @@ export const useLibraryStore = create<LibraryState>()((set, get) => ({
   },
 
   getBook: (id) => get().books.find(b => b.id === id),
+
+  loadBookText: async (id) => {
+    const book = get().books.find((b) => b.id === id);
+    if (!book || book.chapters.every((chapter) => chapter.plainText !== undefined)) return;
+    const { chapters } = await api.apiGetBookText(id);
+    set((s) => ({ books: s.books.map((b) => (b.id === id ? { ...b, chapters } : b)) }));
+  },
 }));

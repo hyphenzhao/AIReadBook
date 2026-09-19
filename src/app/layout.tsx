@@ -6,8 +6,11 @@ import "./globals.css";
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
+  // Pinch-zoom stays enabled: a reading app must not take it away.
+  // cover: lets env(safe-area-inset-*) report the notch and home indicator.
+  viewportFit: "cover",
+  // The on-screen keyboard shrinks the layout instead of covering the input.
+  interactiveWidget: "resizes-content",
 };
 
 export const metadata: Metadata = {

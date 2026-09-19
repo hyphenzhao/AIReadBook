@@ -1,13 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ReadingLayout } from "@/components/reader/ReadingLayout";
 import { ReadingHeader } from "@/components/reader/ReadingHeader";
 import { LeftPanel } from "@/components/reader/panels/LeftPanel";
 import { AIPanel } from "@/components/reader/ai/AIPanel";
 import { SelectionToolbar } from "@/components/reader/SelectionToolbar";
-import { MobileNav } from "@/components/reader/MobileNav";
+import { MobileNav, MOBILE_NAV_HEIGHT } from "@/components/reader/MobileNav";
+import { ChapterEndCard } from "@/components/reader/ChapterEndCard";
+import { useReadingProgress } from "@/hooks/useReadingProgress";
+import { errorMessage } from "@/lib/api-client-v2";
 import { HighlightedText } from "@/components/reader/HighlightedText";
 import { useReadingStore } from "@/stores/reading-store";
 import { useLibraryStore } from "@/stores/library-store";
@@ -38,21 +41,42 @@ export default function ReadPage() {
     y: number;
   } | null>(null);
 
-  const handleTextSelection = useCallback(() => {
-    const sel = window.getSelection();
-    if (!sel || sel.isCollapsed || !sel.toString().trim()) {
-      setSelection(null);
-      return;
-    }
-    const text = sel.toString().trim();
-    if (text.length < 2) return;
-    const range = sel.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    setSelection({
-      text,
-      x: rect.left + rect.width / 2,
-      y: rect.top,
-    });
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
+
+  // The library list carries only the table of contents; fetch this book's text.
+  const textLoaded = useLibraryStore((s) => {
+    const book = s.books.find((b) => b.id === bookId);
+    return !!book && book.chapters.every((chapter) => chapter.plainText !== undefined);
+  });
+  const [textError, setTextError] = useState("");
+  useEffect(() => {
+    if (!libraryReady || textLoaded) return;
+    setTextError("");
+    useLibraryStore.getState().loadBookText(bookId).catch((error) => setTextError(errorMessage(error, "无法加载书籍正文")));
+  }, [libraryReady, textLoaded, bookId]);
+
+  // `selectionchange` rather than mouseup: it is the one event that also fires
+  // for touch selection, where the handles are dragged after the long-press.
+  // Debounced so the toolbar appears when the reader stops adjusting.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const read = () => {
+      const sel = window.getSelection();
+      const text = sel?.toString().trim() ?? "";
+      const inside = sel && sel.rangeCount > 0 && textRef.current?.contains(sel.getRangeAt(0).commonAncestorContainer);
+      if (!sel || sel.isCollapsed || text.length < 2 || !inside) {
+        // Typing a note moves focus into the toolbar and collapses the selection;
+        // that must not close the toolbar it is being typed in.
+        if (!document.activeElement?.closest("[data-selection-toolbar]")) setSelection(null);
+        return;
+      }
+      const rect = sel.getRangeAt(0).getBoundingClientRect();
+      setSelection({ text, x: rect.left + rect.width / 2, y: rect.top });
+    };
+    const onChange = () => { clearTimeout(timer); timer = setTimeout(read, 250); };
+    document.addEventListener("selectionchange", onChange);
+    return () => { clearTimeout(timer); document.removeEventListener("selectionchange", onChange); };
   }, []);
 
   useEffect(() => {
@@ -63,6 +87,8 @@ export default function ReadPage() {
       return;
     }
     setNotFound(false);
+    // The library list has no chapter text; wait for this book's to arrive.
+    if (!textLoaded) return;
 
     // Convert stored book to reading store format
     setBook({
@@ -89,7 +115,7 @@ export default function ReadPage() {
       index: ch.index,
       title: ch.title,
       rawText: null,
-      plainText: ch.plainText,
+      plainText: ch.plainText ?? null,
       wordCount: ch.wordCount,
       summaryShort: null,
       summaryMedium: null,
@@ -98,10 +124,54 @@ export default function ReadPage() {
     }));
 
     setChapters(mappedChapters);
-    if (mappedChapters.length > 0) {
-      setChapter(mappedChapters[0]);
-    }
-  }, [bookId, getBook, libraryReady, setBook, setChapters, setChapter]);
+    // Open straight at the remembered chapter so the first chapter never
+    // flashes by; useReadingProgress then restores the scroll position.
+    let startIndex = 0;
+    try {
+      const saved = JSON.parse(localStorage.getItem(`aireadbook-progress-${bookId}`) ?? "null");
+      if (Number.isInteger(saved?.chapterIndex) && saved.chapterIndex < mappedChapters.length) startIndex = saved.chapterIndex;
+    } catch {}
+    if (mappedChapters.length > 0) setChapter(mappedChapters[startIndex]);
+  }, [bookId, getBook, libraryReady, textLoaded, setBook, setChapters, setChapter]);
+
+  const hasDeepLink = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("chapter");
+  const goToChapter = useCallback((index: number) => {
+    const target = useReadingStore.getState().chapters[index];
+    if (target) setChapter(target);
+  }, [setChapter]);
+  useReadingProgress({
+    bookId,
+    // A citation deep link decides where to go; do not pull the reader elsewhere.
+    enabled: currentBook?.id === bookId && !hasDeepLink && !passageJump,
+    chapterCount: chapters.length,
+    chapterIndex: currentChapter?.index ?? null,
+    scrollRef,
+    contentKey: content,
+    goToChapter,
+  });
+
+  // A new chapter starts at its top (progress restore and citation jumps run after this).
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: 0 });
+    setSelection(null);
+  }, [currentChapter?.id]);
+
+  // Horizontal swipe turns the chapter, unless the reader is selecting text.
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const onTouchStart = (event: React.TouchEvent) => {
+    const touch = event.touches[0];
+    swipe.current = event.touches.length === 1 ? { x: touch.clientX, y: touch.clientY } : null;
+  };
+  const onTouchEnd = (event: React.TouchEvent) => {
+    const start = swipe.current;
+    swipe.current = null;
+    if (!start || !currentChapter || !window.getSelection()?.isCollapsed) return;
+    const touch = event.changedTouches[0];
+    const dx = touch.clientX - start.x;
+    const dy = touch.clientY - start.y;
+    if (Math.abs(dx) < 90 || Math.abs(dx) < Math.abs(dy) * 2.5) return;
+    goToChapter(currentChapter.index + (dx < 0 ? 1 : -1));
+  };
 
   useEffect(() => {
     if (libraryReady && getBook(bookId)) {
@@ -136,8 +206,9 @@ export default function ReadPage() {
 
     setFlash({ start: passageJump.charStart, end: passageJump.charEnd });
     clearPassageJump();
-    // On a phone the AI drawer covers the text it just pointed at.
-    if (window.matchMedia("(max-width: 767px)").matches) useUIStore.setState({ rightPanelOpen: false });
+    // On a phone a full-height AI sheet covers the text it just pointed at;
+    // half height leaves both the answer and the passage in view.
+    useUIStore.setState({ aiSheetSnap: "half" });
     requestAnimationFrame(() => {
       document.querySelector('[data-cited="true"]')?.scrollIntoView({ behavior: "smooth", block: "center" });
     });
@@ -160,10 +231,17 @@ export default function ReadPage() {
     return () => clearTimeout(timer);
   }, [flash]);
 
-  if (!libraryReady) {
+  if (!libraryReady || (!notFound && !textLoaded)) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[var(--background)] text-sm text-[var(--muted-foreground)]">
-        正在加载书籍...
+      <div className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-[var(--background)] px-6 text-center text-sm text-[var(--muted-foreground)]">
+        {textError ? (
+          <>
+            <p role="alert" className="text-red-500">{textError}</p>
+            <button onClick={() => window.location.reload()} className="min-h-10 rounded-md border border-[var(--border)] px-4 hover:bg-[var(--accent)]">重试</button>
+          </>
+        ) : (
+          "正在加载书籍…"
+        )}
       </div>
     );
   }
@@ -195,18 +273,25 @@ export default function ReadPage() {
         centerPanel={
           <>
             <ReadingHeader />
-            <div className="flex-1 overflow-y-auto" onMouseUp={handleTextSelection}>
-              <div className="relative mx-auto max-w-2xl px-8 py-8">
-                {/* Selection toolbar */}
+            <div
+              ref={scrollRef}
+              onTouchStart={onTouchStart}
+              onTouchEnd={onTouchEnd}
+              // The inset keeps the last lines clear of the phone tab bar and a half-open AI sheet.
+              className="flex-1 overflow-y-auto overscroll-contain pb-[var(--reader-bottom-inset,0px)]"
+            >
+              <div className="relative mx-auto max-w-2xl px-5 py-6 sm:px-8 sm:py-8">
                 {selection && (
                   <SelectionToolbar
                     selectedText={selection.text}
                     position={selection}
+                    mobileBottom="var(--reader-bottom-inset, 0px)"
                     onClose={() => setSelection(null)}
                   />
                 )}
                 <div
-                  className="prose prose-slate max-w-none dark:prose-invert"
+                  ref={textRef}
+                  className="prose max-w-none"
                   style={{
                     fontSize: `${preferences.fontSize}px`,
                     lineHeight: preferences.lineHeight,
@@ -240,6 +325,8 @@ export default function ReadPage() {
                     </div>
                   )}
                 </div>
+
+                {currentChapter && content && <ChapterEndCard bookId={bookId} chapterId={currentChapter.id} />}
 
                 {/* Chapter navigation */}
                 {currentChapter && chapters.length > 1 && (
@@ -276,6 +363,7 @@ export default function ReadPage() {
           </>
         }
         rightPanel={<AIPanel />}
+        mobileBottomOffset={MOBILE_NAV_HEIGHT}
       />
       <MobileNav />
     </>

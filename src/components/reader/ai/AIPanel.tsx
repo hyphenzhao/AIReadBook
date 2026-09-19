@@ -30,8 +30,7 @@ export function AIPanel() {
   }, [jumpToPassage]);
 
   return (
-    // Bottom padding keeps the composer clear of the fixed mobile tab bar.
-    <div className="h-full pb-14 md:pb-0">
+    <div className="h-full">
       <AssistantPanel
         context={context}
         mode={aiMode}

@@ -20,6 +20,10 @@ interface UIState {
   aiPanelSize: number; // percentage for right (0.2-0.5), pixels for bottom (200-600)
   toggleAiPanelPosition: () => void;
   setAiPanelSize: (size: number) => void;
+
+  /** Phone only: how tall the AI bottom sheet is. */
+  aiSheetSnap: "half" | "full";
+  setAiSheetSnap: (snap: "half" | "full") => void;
 }
 
 export const useUIStore = create<UIState>()(
@@ -47,6 +51,9 @@ export const useUIStore = create<UIState>()(
           aiPanelSize: s.aiPanelPosition === "right" ? 350 : 0.3,
         })),
       setAiPanelSize: (size) => set({ aiPanelSize: size }),
+
+      aiSheetSnap: "half",
+      setAiSheetSnap: (aiSheetSnap) => set({ aiSheetSnap }),
     }),
     { name: "aireadbook-ui" },
   ),

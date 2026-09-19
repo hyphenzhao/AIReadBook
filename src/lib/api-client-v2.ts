@@ -81,6 +81,10 @@ export async function apiChangePassword(oldPassword: string, newPassword: string
 export async function apiGetBooks() {
   return get("/api/v2/books");
 }
+/** A book's chapters with their text; the library list carries only the table of contents. */
+export async function apiGetBookText(bookId: string): Promise<{ chapters: { id: string; index: number; title: string; plainText: string; wordCount: number }[] }> {
+  return get(`/api/v2/books/${bookId}`);
+}
 export async function apiCreateBook(data: any) {
   return post("/api/v2/books", { userId: currentUserId, ...data });
 }

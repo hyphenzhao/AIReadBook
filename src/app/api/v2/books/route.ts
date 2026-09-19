@@ -7,14 +7,17 @@ import { chapterLabel } from "@/lib/text/chapter-label";
 export async function GET() {
   try {
   const userId = await requireSessionUserId();
+  // The table of contents only. Chapter text is megabytes per book and used to
+  // be sent for the whole library on every page load; the reader now fetches
+  // one book's text from /api/v2/books/:id when it opens.
   const books = await prisma.book.findMany({
     where: { userId }, orderBy: { createdAt: "desc" },
-    include: { chaptersRel: { orderBy: { index: "asc" } } },
+    include: { chaptersRel: { orderBy: { index: "asc" }, select: { id: true, index: true, title: true, wordCount: true } } },
   });
   return NextResponse.json(books.map(b => ({
     id: String(b.id), title: b.title, author: b.author, coverUrl: b.coverUrl,
     language: b.language, totalChapters: b.chapters,
-    chapters: b.chaptersRel.map(ch => ({ id: String(ch.id), index: ch.index, title: ch.title, plainText: ch.content, wordCount: ch.wordCount })),
+    chapters: b.chaptersRel.map(ch => ({ id: String(ch.id), index: ch.index, title: ch.title, wordCount: ch.wordCount })),
     metadata: {}, uploadedAt: b.createdAt.toISOString(),
   })));
   } catch (error) {
