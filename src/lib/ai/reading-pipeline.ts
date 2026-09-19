@@ -35,6 +35,11 @@ export interface SourceRef {
   title?: string;
   url?: string;
   site?: string;
+  /** Paper passages: which paper, where in the PDF, and the boxes to highlight there. */
+  paperId?: number;
+  paperTitle?: string;
+  page?: number;
+  pageBoxes?: { page: number; boxes: [number, number, number, number][] }[];
 }
 
 interface ReadingRequest {

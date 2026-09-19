@@ -10,13 +10,15 @@ interface Props {
   content: string;
   sources?: SourceRef[];
   onCite?: (source: SourceRef) => void;
+  /** In the paper reader: passages from any other paper are labelled with its title. */
+  currentPaperId?: number;
 }
 
 /**
  * Markdown for AI answers in which [c481] / [w2] become chips: a passage chip
  * jumps to the text it cites, a web chip opens the page.
  */
-export function CitationMarkdown({ content, sources = [], onCite }: Props) {
+export function CitationMarkdown({ content, sources = [], onCite, currentPaperId }: Props) {
   const linked = useMemo(() => linkifyCitations(content), [content]);
   const byId = useMemo(() => new Map(sources.map((source) => [source.id, source])), [sources]);
 
@@ -34,7 +36,10 @@ export function CitationMarkdown({ content, sources = [], onCite }: Props) {
             if (!source) return null;
             const label = source.kind === "web"
               ? source.site || "网页"
-              : source.chapterTitle || `第${(source.chapterIndex ?? 0) + 1}章`;
+              : source.page
+                // A paper passage is known by its page; one from another paper also by that paper.
+                ? `${currentPaperId && source.paperId !== currentPaperId ? `${source.paperTitle?.slice(0, 14)}… ` : ""}p.${source.page}`
+                : source.chapterTitle || `第${(source.chapterIndex ?? 0) + 1}章`;
             const className =
               "not-prose mx-0.5 inline-flex max-w-[12rem] cursor-pointer items-center gap-1 truncate rounded-full border border-[var(--border)] bg-[var(--background)] px-2 py-0.5 align-baseline text-[11px] font-normal text-[var(--primary)] no-underline hover:bg-[var(--primary)]/10";
             if (source.kind === "web") {

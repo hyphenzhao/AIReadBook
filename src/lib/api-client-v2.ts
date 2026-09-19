@@ -110,8 +110,9 @@ export async function apiDeleteAnnotation(id: string) {
 }
 
 // --- Chat ---
+/** `bookId` is a book id, or "paper:<id>" for a paper's conversations. */
 export async function apiGetChatSessions(bookId: string) {
-  return get(`/api/v2/chat?bookId=${bookId}`);
+  return get(bookId.startsWith("paper:") ? `/api/v2/chat?paperId=${bookId.slice(6)}` : `/api/v2/chat?bookId=${bookId}`);
 }
 export async function apiCreateChatSession(data: any) {
   return post("/api/v2/chat", data);
@@ -221,6 +222,11 @@ export interface SourceRef {
   title?: string;
   url?: string;
   site?: string;
+  /** Paper passages: which paper, where in the PDF, and the boxes to highlight there. */
+  paperId?: number;
+  paperTitle?: string;
+  page?: number;
+  pageBoxes?: { page: number; boxes: [number, number, number, number][] }[];
 }
 export async function apiGetChapterSummary(chapterId: string): Promise<{ summary: string | null; model: string | null; generatedAt: string | null; sources: SourceRef[] }> {
   return get(`/api/summary?chapterId=${encodeURIComponent(chapterId)}`);

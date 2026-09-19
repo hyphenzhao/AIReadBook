@@ -91,6 +91,29 @@ export function apiGetPaperProgress(id: number): Promise<{ locator: PaperLocator
   return apiRequest("GET", `/api/papers/${id}/progress`);
 }
 
+export interface PaperAnnotationView {
+  id: number;
+  page: number;
+  /** PDF points, origin top-left. */
+  boxes: [number, number, number, number][];
+  text: string;
+  note: string | null;
+  color: string;
+  createdAt: string;
+}
+export function apiListPaperAnnotations(id: number): Promise<{ annotations: PaperAnnotationView[] }> {
+  return apiRequest("GET", `/api/papers/${id}/annotations`);
+}
+export function apiAddPaperAnnotation(
+  id: number,
+  data: { page: number; boxes: number[][]; text: string; note?: string; color?: string },
+): Promise<{ annotation: PaperAnnotationView }> {
+  return apiRequest("POST", `/api/papers/${id}/annotations`, { body: data });
+}
+export async function apiDeletePaperAnnotation(id: number, annotationId: number) {
+  await apiRequest("DELETE", `/api/papers/${id}/annotations?annotationId=${annotationId}`);
+}
+
 export const STAGE_LABELS: Record<string, string> = {
   UPLOADED: "等待处理",
   EXTRACTING: "提取文字",

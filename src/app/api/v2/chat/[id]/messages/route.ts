@@ -10,7 +10,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!["user", "assistant"].includes(role) || !String(content || "").trim()) return NextResponse.json({ error: "valid role & content required" }, { status: 400 });
   const sessionId = parseInt(id);
   const session = await prisma.chatSession.findFirst({
-    where: { id: sessionId, book: { userId } },
+    where: { id: sessionId, OR: [{ book: { userId } }, { paper: { userId } }] },
     select: { id: true },
   });
   if (!session) return NextResponse.json({ error: "chat not found" }, { status: 404 });

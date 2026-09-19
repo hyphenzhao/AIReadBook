@@ -91,6 +91,9 @@ export default function LibraryPage() {
               <Link href="/search" className="rounded px-3 py-1.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)] flex items-center gap-1">
                 <Compass className="h-3.5 w-3.5" />发现
               </Link>
+              <Link href="/papers" className="rounded px-3 py-1.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]">
+                文献
+              </Link>
               <Link href="/graph" className="rounded px-3 py-1.5 text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--foreground)]">
                 图谱
               </Link>

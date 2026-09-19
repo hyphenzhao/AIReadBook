@@ -46,6 +46,26 @@ describe("detectSections", () => {
     expect(sectionAt(sections, sections[1].start + 40)?.title).toBe("1 Introduction");
   });
 
+  it("finds a heading that runs into its paragraph block (Nature-style layout)", () => {
+    // poppler puts "Results" and the 14 lines under it in one block.
+    const text = `Results ${body}`;
+    const runIn: ExtractedPage = {
+      pageNo: 1, width: 595, height: 782, text,
+      lines: [{ s: 0, e: 7, b: [40, 100, 80, 109] }, { s: 8, e: text.length, b: [40, 112, 300, 121] }],
+      blocks: [{ s: 0, e: text.length, lineCount: 14, lineHeight: 9 }],
+    };
+    expect(detectSections([runIn], [0]).sections.map((s) => s.title)).toEqual(["Results"]);
+
+    // …but a paragraph that merely starts with such a word is not a heading.
+    const sentence = "Results of this kind have been reported before, and they were replicated here.";
+    const prose: ExtractedPage = {
+      ...runIn, text: sentence + body,
+      lines: [{ s: 0, e: sentence.length, b: [40, 100, 300, 109] }],
+      blocks: [{ s: 0, e: sentence.length + body.length, lineCount: 9, lineHeight: 9 }],
+    };
+    expect(detectSections([prose], [0]).sections).toEqual([]);
+  });
+
   it("recognises Chinese headings", () => {
     const zh = [page(1, [["摘 要", 1, 11], ["本文研究睡眠对记忆巩固的作用。".repeat(8), 5, 9], ["一、引言", 1, 11], ["参考文献", 1, 11]])];
     expect(detectSections(zh, [0]).sections.map((s) => s.title)).toEqual(["摘 要", "一、引言", "参考文献"]);

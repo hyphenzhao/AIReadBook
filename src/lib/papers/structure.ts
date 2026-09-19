@@ -27,30 +27,47 @@ function median(values: number[]) {
   return sorted[Math.floor(sorted.length / 2)];
 }
 
+// The whole line is a section name and nothing else: "Results", "2 Methods", "参考文献".
+const NAMED_LINE = new RegExp(`${NAMED_HEADING.source.replace(/\(\?!\[A-Za-z\]\)$/, "")}\\s*$`, "i");
+const stripNumbering = (text: string) => text.replace(NUMBERED_HEADING, (m) => m.slice(-1)).trim();
+
 /**
- * A heading is a short, single-line block that is named like one, or numbered
- * like one and set larger than the body text. Line height stands in for font
- * size, which poppler's bbox output does not carry.
+ * Headings come in two shapes:
+ *  - a short block of its own, named like a heading, or numbered like one and
+ *    set larger than the body (line height stands in for font size, which
+ *    poppler's bbox output does not carry);
+ *  - the first line of a paragraph block. Journals that run the heading into
+ *    the text ("Results" directly above its first paragraph, as Nature does)
+ *    give poppler no reason to split them. Only an exact section name counts
+ *    here, since any sentence can start a paragraph.
  */
 export function detectSections(pages: ExtractedPage[], pageOffsets: number[]) {
-  const bodyHeight = median(pages.flatMap((page) => page.blocks.filter((b) => b.lineCount >= 3).map((b) => b.lineHeight / 1)));
+  const bodyHeight = median(pages.flatMap((page) => page.blocks.filter((b) => b.lineCount >= 3).map((b) => b.lineHeight)));
   const sections: Section[] = [];
   let referencesStart: number | null = null;
 
   pages.forEach((page, i) => {
     for (const block of page.blocks) {
-      if (block.lineCount > 2) continue;
-      const text = page.text.slice(block.s, block.e).replace(/\s+/g, " ").trim();
-      if (text.length < 2 || text.length > 90 || /[.。,，;；:：]$/.test(text)) continue;
+      let title: string | null = null;
 
-      const stripped = text.replace(NUMBERED_HEADING, (m) => m.slice(-1)).trim();
-      const named = NAMED_HEADING.test(stripped) && stripped.split(/\s+/).length <= 6;
-      const numbered = NUMBERED_HEADING.test(text) && (bodyHeight === 0 || block.lineHeight >= bodyHeight * 1.08);
-      if (!named && !numbered) continue;
+      if (block.lineCount <= 2) {
+        const text = page.text.slice(block.s, block.e).replace(/\s+/g, " ").trim();
+        if (text.length >= 2 && text.length <= 90 && !/[.。,，;；:：]$/.test(text)) {
+          const stripped = stripNumbering(text);
+          const named = NAMED_HEADING.test(stripped) && stripped.split(/\s+/).length <= 6;
+          const numbered = NUMBERED_HEADING.test(text) && (bodyHeight === 0 || block.lineHeight >= bodyHeight * 1.08);
+          if (named || numbered) title = text;
+        }
+      } else {
+        const first = page.lines.find((line) => line.s === block.s);
+        const text = first && page.text.slice(first.s, first.e).replace(/\s+/g, " ").trim();
+        if (text && text.length <= 40 && NAMED_LINE.test(stripNumbering(text))) title = text;
+      }
+      if (!title) continue;
 
       const start = pageOffsets[i] + block.s;
-      if (referencesStart === null && REFERENCES.test(text)) referencesStart = start;
-      sections.push({ title: text, start, page: page.pageNo });
+      if (referencesStart === null && REFERENCES.test(title)) referencesStart = start;
+      sections.push({ title, start, page: page.pageNo });
     }
   });
   return { sections, referencesStart };

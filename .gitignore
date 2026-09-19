@@ -48,3 +48,9 @@ next-env.d.ts
 # side build directory used by deploy/deploy.sh
 /.next-build/
 /.next-prev/
+
+# scratch scripts for remote runs
+/.run/
+
+# generated from node_modules by scripts/copy-pdfjs-assets.mjs
+/public/pdfjs/

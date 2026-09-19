@@ -19,12 +19,18 @@ import type { ChatMode } from "@/types";
 
 /** What is on screen. The panel knows nothing else about books or papers. */
 export interface AssistantContext {
+  /** Books have chapters, a summary mode and knowledge actions; papers have pages. */
+  kind?: "book" | "paper";
+  /** A book id, or "paper:<id>" — the key conversations are stored under. */
   bookId: string;
   bookTitle: string;
   unitId: string | null;
   unitIndex: number | null;
-  /** "第三章 鸿门宴" — shown to the reader, and used to title conversations. */
+  /** "第三章 鸿门宴" / "第 5 页" — shown to the reader, and used to title conversations. */
   unitLabel: string;
+  /** Papers: the id and the page in view. */
+  paperId?: number;
+  page?: number;
 }
 
 type WebMode = "auto" | "on" | "off";
@@ -77,13 +83,13 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
   const bookSessions = context ? getBookSessions(context.bookId) : [];
 
   // Memoized: a new object each render would make useChat re-create itself.
-  const chatBody = useMemo(() => ({
-    bookId: context?.bookId,
-    bookTitle: context?.bookTitle,
-    chapterId: context?.unitId,
-    chapterIndex: context?.unitIndex,
-    mode,
-  }), [context?.bookId, context?.bookTitle, context?.unitId, context?.unitIndex, mode]);
+  const isPaper = context?.kind === "paper";
+  const chatBody = useMemo(() => (
+    isPaper
+      // The page in view changes constantly, so it travels with each question instead.
+      ? { paperId: context?.paperId, mode }
+      : { bookId: context?.bookId, bookTitle: context?.bookTitle, chapterId: context?.unitId, chapterIndex: context?.unitIndex, mode }
+  ), [isPaper, context?.paperId, context?.bookId, context?.bookTitle, context?.unitId, context?.unitIndex, mode]);
 
   // Id of an answer that stopped because it hit the Max Tokens setting.
   const [truncatedId, setTruncatedId] = useState<string | null>(null);
@@ -165,7 +171,7 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
     // separately so retrieval can search for it verbatim.
     const shown = selection ? `> ${selection.replace(/\n+/g, " ").slice(0, 600)}\n\n${content}` : content;
     useChatStore.getState().addMessage(sessionId, "user", shown);
-    void append({ role: "user", content: shown }, { body: { selection: selection ?? undefined, web } });
+    void append({ role: "user", content: shown }, { body: { selection: selection ?? undefined, web, page: context.page } });
     setInput("");
     setQuote(null);
   }
@@ -242,14 +248,18 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
   }
 
   const webMode = WEB_MODES[web];
-  const emptyHint = mode === "summary"
-    ? "看完摘要后，可以在下面就本章内容提问。"
-    : `读到不明白的地方，直接问我。我会先在「${context?.unitLabel ?? "本章"}」里找依据，不够再查全书，需要背景或评价时再联网。`;
+  const emptyHint = isPaper
+    ? "选中文献里的一句话，或直接提问。我会先看你正在读的这几页，再查全文；证据不够，或你问到「其他文献怎么说」时，会到你的整个文献库里找，必要时再联网。"
+    : mode === "summary"
+      ? "看完摘要后，可以在下面就本章内容提问。"
+      : `读到不明白的地方，直接问我。我会先在「${context?.unitLabel ?? "本章"}」里找依据，不够再查全书，需要背景或评价时再联网。`;
 
   return (
     <div className="flex h-full flex-col bg-[var(--background)]">
       <div className="flex items-center gap-1 border-b border-[var(--border)] px-2 py-1.5">
-        {MODES.map((m) => (
+        {isPaper && <span className="flex min-h-9 items-center gap-1.5 px-2 text-sm font-medium"><Sparkles className="h-4 w-4 text-[var(--primary)]" />问 AI</span>}
+        {/* Summary mode and the knowledge actions below are built on chapters. */}
+        {!isPaper && MODES.map((m) => (
           <button
             key={m.id}
             onClick={() => onModeChange(m.id)}
@@ -309,8 +319,8 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
                 }`}>
                   {msg.role === "assistant" ? (
                     <>
-                      {sourceData && <SourcesStrip data={sourceData} currentChapterId={context?.unitId ?? null} onCite={onCite} />}
-                      <CitationMarkdown content={msg.content} sources={sourceData?.sources} onCite={onCite} />
+                      {sourceData && <SourcesStrip data={sourceData} currentChapterId={context?.unitId ?? null} currentPaperId={context?.paperId} onCite={onCite} />}
+                      <CitationMarkdown content={msg.content} sources={sourceData?.sources} onCite={onCite} currentPaperId={context?.paperId} />
                       {msg.id === truncatedId && (
                         <p className="mt-2 border-t border-[var(--border)] pt-2 text-xs text-amber-600">
                           回答达到了长度上限，被截断了。可以让我「继续」，或在
@@ -328,7 +338,7 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
           {isLoading && messages[messages.length - 1]?.role === "user" && (
             <p className="flex items-center gap-2 text-xs text-[var(--muted-foreground)]">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              {mode === "summary" ? "正在查阅本章…" : "正在查找依据：本章 → 全书 → 网络…"}
+              {isPaper ? "正在查找依据：当前页 → 全文 → 文献库…" : mode === "summary" ? "正在查阅本章…" : "正在查找依据：本章 → 全书 → 网络…"}
             </p>
           )}
           <div ref={bottomRef} />
@@ -336,7 +346,7 @@ export function AssistantPanel({ context, mode, onModeChange, pendingSelection, 
       </div>
 
       <div className="border-t border-[var(--border)] p-2">
-        {context && (
+        {context && !isPaper && (
           <div className="mb-2">
             <KnowledgeActions bookId={context.bookId} chapterId={context.unitId} />
           </div>

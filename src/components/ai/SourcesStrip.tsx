@@ -6,7 +6,8 @@ import type { SourceRef } from "@/lib/api-client-v2";
 
 export interface SourcesAnnotation {
   type: "sources";
-  tier: "chapter" | "book" | "overview" | "none";
+  /** Books: chapter | book | overview. Papers: pages | paper | library | overview. */
+  tier: string;
   webSearched: boolean;
   sources: SourceRef[];
 }
@@ -17,25 +18,32 @@ export function sourcesOf(annotations: unknown): SourcesAnnotation | null {
   return found ? (found as SourcesAnnotation) : null;
 }
 
-const TIER_LABEL = { chapter: "本章", book: "全书", overview: "全书概览", none: "未找到原文" } as const;
+const TIER_LABEL: Record<string, string> = {
+  chapter: "本章", book: "全书", overview: "概览", pages: "当前页附近", paper: "本文", library: "文献库", none: "未找到原文",
+};
 
 /** One line saying what the answer rests on; expands to the passages themselves. */
-export function SourcesStrip({ data, currentChapterId, onCite }: {
+export function SourcesStrip({ data, currentChapterId, currentPaperId, onCite }: {
   data: SourcesAnnotation;
   currentChapterId: string | null;
+  currentPaperId?: number;
   onCite?: (source: SourceRef) => void;
 }) {
   const [open, setOpen] = useState(false);
   const passages = data.sources.filter((source) => source.kind === "passage");
   const web = data.sources.filter((source) => source.kind === "web");
-  const here = passages.filter((source) => String(source.chapterId) === currentChapterId).length;
+  // "Here" is the chapter being read, or the paper being read.
+  const here = passages.filter((source) =>
+    currentPaperId ? source.paperId === currentPaperId : String(source.chapterId) === currentChapterId,
+  ).length;
+  const elsewhere = passages.length - here;
 
   const parts = [
-    here ? `本章 ${here} 段` : "",
-    passages.length - here ? `其他章节 ${passages.length - here} 段` : "",
+    here ? `${currentPaperId ? "本文" : "本章"} ${here} 段` : "",
+    elsewhere ? `${currentPaperId ? "其他文献" : "其他章节"} ${elsewhere} 段` : "",
     web.length ? `网络 ${web.length} 条` : data.webSearched ? "联网无结果" : "",
   ].filter(Boolean);
-  const summary = parts.length ? parts.join(" · ") : TIER_LABEL[data.tier];
+  const summary = parts.length ? parts.join(" · ") : TIER_LABEL[data.tier] ?? data.tier;
 
   return (
     <div className="mb-2 rounded-md border border-[var(--border)] bg-[var(--background)]/60 text-[11px] text-[var(--muted-foreground)]">
@@ -62,7 +70,11 @@ export function SourcesStrip({ data, currentChapterId, onCite }: {
                 </a>
               ) : (
                 <button type="button" onClick={() => onCite?.(source)} className="block w-full rounded p-1.5 text-left hover:bg-[var(--accent)]">
-                  <span className="text-[var(--primary)]">¶ {source.chapterTitle}</span>
+                  <span className="line-clamp-1 text-[var(--primary)]">
+                    ¶ {source.page
+                      ? [source.paperId !== currentPaperId ? `《${source.paperTitle}》` : "", source.chapterTitle, `p.${source.page}`].filter(Boolean).join(" · ")
+                      : source.chapterTitle}
+                  </span>
                   <span className="line-clamp-2">{source.preview}…</span>
                 </button>
               )}

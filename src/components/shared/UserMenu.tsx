@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { User, Users, Settings, Brain, LogOut, Search, Network } from "lucide-react";
+import { BookOpen, FileText, User, Users, Settings, Brain, LogOut, Search, Network } from "lucide-react";
 import { useUserStore } from "@/stores/user-store";
 
 export function UserMenu() {
@@ -51,6 +51,22 @@ export function UserMenu() {
             </>
           )}
 
+          <Link
+            href="/library"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--accent)]"
+          >
+            <BookOpen className="h-4 w-4" />
+            读书
+          </Link>
+          <Link
+            href="/papers"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-3 py-2 text-sm hover:bg-[var(--accent)]"
+          >
+            <FileText className="h-4 w-4" />
+            文献
+          </Link>
           <Link
             href="/search"
             onClick={() => setOpen(false)}
