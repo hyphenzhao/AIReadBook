@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { GraphScope } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getUserLLM } from "@/lib/ai/user-llm";
+import { lenientList } from "@/lib/ai/lenient";
 import { readCurrentChapter } from "@/lib/ai/reading-pipeline";
 import { bytesToVector, embedTexts, vectorToBytes } from "@/lib/embedding/client";
 import { cosine } from "@/lib/vector";
@@ -14,19 +15,19 @@ import { enqueueJob } from "@/lib/jobs/queue";
 import type { JobContext } from "@/lib/jobs/worker";
 
 const graphSchema = z.object({
-  entities: z.array(z.object({
+  entities: lenientList(z.object({
     name: z.string().describe("实体的规范名称，尽量用原文里的称呼"),
     type: z.enum(BOOK_NODE_TYPES),
-    description: z.string().describe("一句话说明它是什么，30 字以内"),
-    aliases: z.array(z.string()).max(5).describe("原文中出现的别称、字号、简称"),
-    quote: z.string().describe("正文中提到它的一句原文，逐字摘抄"),
-  })).max(30),
-  relations: z.array(z.object({
+    description: z.string().default("").describe("一句话说明它是什么，30 字以内"),
+    aliases: lenientList(z.string(), 5).describe("原文中出现的别称、字号、简称"),
+    quote: z.string().default("").describe("正文中提到它的一句原文，逐字摘抄"),
+  }), 30),
+  relations: lenientList(z.object({
     source: z.string().describe("entities 中某个实体的 name"),
     target: z.string().describe("entities 中另一个实体的 name"),
     relation: z.string().describe("关系，2–8 个字的动词短语，如「击败」「师从」「提出」「属于」"),
-    quote: z.string().describe("正文中体现这一关系的一句原文，逐字摘抄"),
-  })).max(40),
+    quote: z.string().default("").describe("正文中体现这一关系的一句原文，逐字摘抄"),
+  }), 40),
 });
 
 const SYSTEM = `你是一位知识图谱构建专家，从读者正在读的这一章里抽取实体和它们之间的关系。

@@ -2,6 +2,7 @@ import { generateObject } from "ai";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getUserLLM } from "@/lib/ai/user-llm";
+import { lenientList } from "@/lib/ai/lenient";
 import { readCurrentChapter } from "@/lib/ai/reading-pipeline";
 import { chunkContaining, locateQuote } from "@/lib/knowledge/quote-match";
 
@@ -9,14 +10,14 @@ export const CARD_TYPES = ["concept", "argument", "evidence", "example", "questi
 export const DIFFICULTIES = ["basic", "intermediate", "advanced"] as const;
 
 const cardSchema = z.object({
-  cards: z.array(z.object({
+  cards: lenientList(z.object({
     title: z.string().describe("简洁的卡片标题，不超过 20 字"),
     content: z.string().describe("100–250 字，独立可读，讲清这个知识点"),
-    cardType: z.enum(CARD_TYPES),
-    tags: z.array(z.string()).max(5),
-    difficulty: z.enum(DIFFICULTIES),
-    quote: z.string().describe("支撑这张卡片的一句原文，必须从正文中逐字摘抄，不要改写"),
-  })).min(1).max(12),
+    cardType: z.enum(CARD_TYPES).catch("concept"),
+    tags: lenientList(z.string(), 5),
+    difficulty: z.enum(DIFFICULTIES).catch("intermediate"),
+    quote: z.string().default("").describe("支撑这张卡片的一句原文，必须从正文中逐字摘抄，不要改写"),
+  }), 12),
 });
 
 const SYSTEM = `你是一位知识提取专家，把读者正在读的这一章提炼成若干张知识卡片。

@@ -3,6 +3,7 @@ import { z } from "zod";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getUserLLM } from "@/lib/ai/user-llm";
+import { lenientList } from "@/lib/ai/lenient";
 import { embedTexts } from "@/lib/embedding/client";
 import { chunkContaining, locateQuote } from "@/lib/knowledge/quote-match";
 import { loadCandidates, pruneGraph, resolveNode, type Candidate } from "@/lib/knowledge/graph-extract";
@@ -17,24 +18,24 @@ import { nodeEmbeddingText, normalizeName } from "@/lib/knowledge/graph-names";
 
 const quoted = (what: string) => z.object({
   text: z.string().describe(what),
-  quote: z.string().describe("支撑它的一句原文，从正文中逐字摘抄，不要改写或翻译"),
+  quote: z.string().default("").describe("支撑它的一句原文，从正文中逐字摘抄，不要改写或翻译"),
 });
 
 const analysisSchema = z.object({
   researchQuestion: quoted("这篇文献要回答的核心研究问题，一两句话"),
-  methods: z.array(z.object({
+  methods: lenientList(z.object({
     name: z.string().describe("方法的通用名称，尽量用领域内的标准叫法，如 \"multivariate pattern classification\"、\"随机对照试验\""),
     detail: z.string().describe("本文具体是怎么用的，一句话"),
-    quote: z.string(),
-  })).max(8),
-  datasets: z.array(z.object({
+    quote: z.string().default(""),
+  }), 8),
+  datasets: lenientList(z.object({
     name: z.string().describe("数据集、队列或样本的名称；没有名称就概括为如 \"32 名健康成人的整夜高密度 EEG\""),
     detail: z.string().describe("规模和关键特征，一句话"),
-    quote: z.string(),
-  })).max(6),
-  findings: z.array(quoted("一条主要发现或结论，写成完整的陈述句，包含方向和对象")).max(8),
-  limitations: z.array(quoted("作者承认的或明显存在的一条局限")).max(6),
-  keywords: z.array(z.string().describe("关键词，用领域内的标准术语")).max(10),
+    quote: z.string().default(""),
+  }), 6),
+  findings: lenientList(quoted("一条主要发现或结论，写成完整的陈述句，包含方向和对象"), 8),
+  limitations: lenientList(quoted("作者承认的或明显存在的一条局限"), 6),
+  keywords: lenientList(z.string().describe("关键词，用领域内的标准术语"), 10),
 });
 
 export type PaperAnalysisDraft = z.infer<typeof analysisSchema>;
