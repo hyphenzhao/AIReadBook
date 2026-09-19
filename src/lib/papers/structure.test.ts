@@ -56,6 +56,15 @@ describe("detectSections", () => {
     };
     expect(detectSections([runIn], [0]).sections.map((s) => s.title)).toEqual(["Results"]);
 
+    // The same heading over a block of just two lines ("Methods" + one line of text).
+    const two = "Methods Subjects. In this study, we recorded EEG data from thirty-two healthy volunteers during sleep.";
+    const twoLines: ExtractedPage = {
+      ...runIn, text: two,
+      lines: [{ s: 0, e: 7, b: [40, 100, 80, 109] }, { s: 8, e: two.length, b: [40, 112, 300, 121] }],
+      blocks: [{ s: 0, e: two.length, lineCount: 2, lineHeight: 9 }],
+    };
+    expect(detectSections([twoLines], [0]).sections.map((s) => s.title)).toEqual(["Methods"]);
+
     // …but a paragraph that merely starts with such a word is not a heading.
     const sentence = "Results of this kind have been reported before, and they were replicated here.";
     const prose: ExtractedPage = {

@@ -42,6 +42,7 @@ interface PaperRequest {
 
 const WHOLE_PAPER = /(全文|整篇|这篇(?:文献|论文|文章)(?:的)?(?:主要|核心|总体)|总结(?:一下)?(?:这篇|本文|全文)|本文(?:的)?(?:主要|核心)|main (?:idea|contribution)|summar(?:y|ize))/i;
 const LIBRARY = /(其他(?:文献|论文|文章)|别的(?:文献|论文)|文献库|我的(?:文献|论文)|相关(?:文献|研究|工作)|哪些(?:文献|论文)|other papers|related work|my (?:library|papers))/i;
+const THIS_PAGE = /(这一?页|本页|当前页|这一?段|这里|这句|上文|this page|this paragraph|this sentence)/i;
 
 const preview = (text: string) => text.replace(/\s+/g, " ").trim().slice(0, 90);
 
@@ -128,7 +129,13 @@ export async function runPaperPipeline(request: PaperRequest): Promise<PaperPipe
       ? await searchPaperPassages({ userId, paperId, pages: { from: Math.max(1, page - 1), to: page + 1 }, query: searchText, topK: 4, queryVector })
       : null;
 
-    if (near && isPaperEvidenceSufficient(near) && !LIBRARY.test(request.query)) {
+    // Stop there only when the question points at the page — selected text, or
+    // "这一页 / 这段". Otherwise a loosely similar passage nearby must not hide the
+    // real answer elsewhere: asked "how many subjects?" from the Results pages,
+    // the ladder once stopped on page 4 while the number sat in Methods on page 7.
+    // A paper is a few dozen chunks, so searching all of it costs nothing.
+    const aboutThisPage = !!request.selection || THIS_PAGE.test(request.query);
+    if (near && aboutThisPage && isPaperEvidenceSufficient(near) && !LIBRARY.test(request.query)) {
       add(`读者正在看的第 ${page} 页附近`, near.hits);
       tier = "pages";
       directive = "本轮在读者正在看的页面附近找到了相关原文。请直接依据这些段落回答。";

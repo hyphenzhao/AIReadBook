@@ -58,7 +58,10 @@ export function detectSections(pages: ExtractedPage[], pageOffsets: number[]) {
           const numbered = NUMBERED_HEADING.test(text) && (bodyHeight === 0 || block.lineHeight >= bodyHeight * 1.08);
           if (named || numbered) title = text;
         }
-      } else {
+      }
+      // Not a heading block of its own — but its first line may still be one.
+      // This also covers a two-line block of "Methods" + the first line of text.
+      if (!title && block.lineCount >= 2) {
         const first = page.lines.find((line) => line.s === block.s);
         const text = first && page.text.slice(first.s, first.e).replace(/\s+/g, " ").trim();
         if (text && text.length <= 40 && NAMED_LINE.test(stripNumbering(text))) title = text;
