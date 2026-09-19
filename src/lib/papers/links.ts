@@ -7,6 +7,7 @@ import { cosine } from "@/lib/vector";
 import { paperCentroids } from "@/lib/vector/papers";
 import { normalizeName } from "@/lib/knowledge/graph-names";
 import type { PaperAnalysisData } from "@/lib/papers/analyze";
+import type { JobContext } from "@/lib/jobs/worker";
 
 /**
  * Relations between one paper and the rest of the library.
@@ -28,14 +29,51 @@ export type LinkType = (typeof LINK_TYPES)[number];
 
 const SHARED_TYPE: Record<string, LinkType> = { keyword: "SHARED_KEYWORD", method: "SHARED_METHOD", dataset: "SHARED_DATASET", conclusion: "AGREES" };
 const SIMILAR_THRESHOLD = 0.78;
+const SIMILAR_TOP = 3;
 const JUDGE_TOP = 3;
+
+/**
+ * A node a third of the library points at describes the field, not a connection
+ * between two papers: in a library about gait, "EEG" would link everything to
+ * everything. Small libraries are left alone — there, every overlap is news.
+ */
+export function tooCommon(papersWithNode: number, paperCount: number) {
+  return paperCount >= 9 && papersWithNode > paperCount / 3;
+}
+
+/**
+ * "Similar" is relative. In a library on one subject every pair clears a fixed
+ * threshold, so a pair is linked only when one of the two counts the other
+ * among its few nearest — and the threshold still keeps unrelated papers apart.
+ */
+export function nearestPapers(paperId: number, centroids: Map<number, Float32Array>, top = SIMILAR_TOP) {
+  const own = centroids.get(paperId);
+  if (!own) return [];
+  // The similarity a paper's top-th nearest neighbour has: the bar to be "among its nearest".
+  const bar = (id: number, vector: Float32Array) => {
+    const all: number[] = [];
+    for (const [otherId, other] of centroids) if (otherId !== id) all.push(cosine(vector, other));
+    all.sort((a, b) => b - a);
+    return all[Math.min(top, all.length) - 1] ?? 1;
+  };
+  const ownBar = bar(paperId, own);
+  const result: { otherId: number; similarity: number }[] = [];
+  for (const [otherId, vector] of centroids) {
+    if (otherId === paperId) continue;
+    const similarity = cosine(own, vector);
+    if (similarity < SIMILAR_THRESHOLD) continue;
+    if (similarity >= ownBar || similarity >= bar(otherId, vector)) result.push({ otherId, similarity });
+  }
+  return result;
+}
 
 interface Draft { otherId: number; type: LinkType; score: number; evidence: Prisma.InputJsonValue; origin: "AUTO" | "LLM" }
 
-async function upsertLinks(userId: number, paperId: number, drafts: Draft[]) {
-  // Recompute this paper's automatic links from scratch; keep the reader's own.
+async function upsertLinks(userId: number, paperId: number, drafts: Draft[], origins: Draft["origin"][]) {
+  // Recompute this paper's automatic links from scratch; keep the reader's own
+  // (and the model's verdicts, when this run did not ask for new ones).
   await prisma.paperLink.deleteMany({
-    where: { userId, origin: { in: ["AUTO", "LLM"] }, dismissed: false, OR: [{ paperAId: paperId }, { paperBId: paperId }] },
+    where: { userId, origin: { in: origins }, dismissed: false, OR: [{ paperAId: paperId }, { paperBId: paperId }] },
   });
   for (const draft of drafts) {
     const [paperAId, paperBId] = paperId < draft.otherId ? [paperId, draft.otherId] : [draft.otherId, paperId];
@@ -76,6 +114,18 @@ async function judgePair(userId: number, a: { title: string; data: PaperAnalysis
   return object.relation === "UNRELATED" ? null : { ...object, relation: object.relation };
 }
 
+/**
+ * Job "relink_papers": recompute the automatic links of a whole library, e.g.
+ * after the rules changed. The model's verdicts are kept and no LLM call is made.
+ */
+export async function relinkLibrary(userId: number, ctx: JobContext) {
+  const papers = await prisma.paper.findMany({ where: { userId }, orderBy: { id: "asc" }, select: { id: true } });
+  for (const [i, paper] of papers.entries()) {
+    await computePaperLinks(paper.id, { judge: false });
+    await ctx.progress(`relinking ${i + 1}/${papers.length}`, Math.round(((i + 1) / papers.length) * 100));
+  }
+}
+
 export async function computePaperLinks(paperId: number, options: { judge?: boolean } = {}) {
   const paper = await prisma.paper.findUnique({
     where: { id: paperId },
@@ -98,7 +148,7 @@ export async function computePaperLinks(paperId: number, options: { judge?: bool
     for (const { dst } of mine) {
       const type = SHARED_TYPE[dst.type];
       const others = [...new Set(dst.inEdges.map((edge) => edge.src.paperId).filter((id): id is number => !!id && id !== paperId))];
-      if (!type || others.length === 0) continue;
+      if (!type || others.length === 0 || tooCommon(others.length + 1, paperCount)) continue;
       // Inverse document frequency: a node half the library shares says little.
       const idf = Math.log(1 + paperCount / (others.length + 1));
       for (const otherId of others) {
@@ -116,17 +166,9 @@ export async function computePaperLinks(paperId: number, options: { judge?: bool
   }
 
   // 2a. Overall similarity of the texts.
-  const centroids = await paperCentroids(userId);
-  const own = centroids.get(paperId);
-  if (own) {
-    for (const [otherId, vector] of centroids) {
-      if (otherId === paperId) continue;
-      const similarity = cosine(own, vector);
-      if (similarity >= SIMILAR_THRESHOLD) {
-        drafts.push({ otherId, type: "SIMILAR", score: similarity, evidence: { similarity: Math.round(similarity * 1000) / 1000 }, origin: "AUTO" });
-        bump(otherId, similarity);
-      }
-    }
+  for (const { otherId, similarity } of nearestPapers(paperId, await paperCentroids(userId))) {
+    drafts.push({ otherId, type: "SIMILAR", score: similarity, evidence: { similarity: Math.round(similarity * 1000) / 1000 }, origin: "AUTO" });
+    bump(otherId, similarity);
   }
 
   // 2b. Citations, both ways: a DOI or a full title found in the other's text.
@@ -172,6 +214,6 @@ export async function computePaperLinks(paperId: number, options: { judge?: bool
   // The model's reading of two conclusions outranks "they merged into one node".
   const judged = new Set(drafts.filter((d) => d.origin === "LLM").map((d) => d.otherId));
   const final = drafts.filter((d) => !(d.type === "AGREES" && d.origin === "AUTO" && judged.has(d.otherId)));
-  await upsertLinks(userId, paperId, final);
+  await upsertLinks(userId, paperId, final, options.judge === false ? ["AUTO"] : ["AUTO", "LLM"]);
   return final.length;
 }

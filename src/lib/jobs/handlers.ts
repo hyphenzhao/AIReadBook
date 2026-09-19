@@ -4,6 +4,7 @@ import { indexBook } from "@/lib/knowledge/index-book";
 import { extractChapterGraph } from "@/lib/knowledge/graph-extract";
 import { ingestPaper, reanalyzePaper } from "@/lib/papers/ingest";
 import { fetchPaperPdf } from "@/lib/papers/fetch-pdf";
+import { relinkLibrary } from "@/lib/papers/links";
 
 type Handler = (job: Job, ctx: JobContext) => Promise<void>;
 
@@ -15,4 +16,5 @@ export const JOB_HANDLERS: Record<string, Handler> = {
   ingest_paper: (job, ctx) => ingestPaper(Number(payloadOf(job).paperId), ctx),
   analyze_paper: (job, ctx) => reanalyzePaper(Number(payloadOf(job).paperId), ctx),
   fetch_paper_pdf: (job, ctx) => fetchPaperPdf(Number(payloadOf(job).paperId), String(payloadOf(job).url), ctx),
+  relink_papers: (job, ctx) => relinkLibrary(Number(job.userId), ctx),
 };
