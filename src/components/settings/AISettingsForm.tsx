@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Eye, EyeOff, RefreshCw, Save, Trash2 } from "lucide-react";
+import { Check, ChevronDown, Eye, EyeOff, RefreshCw, Save, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useUserStore } from "@/stores/user-store";
@@ -31,6 +31,19 @@ export function AISettingsForm() {
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<Status>(null);
 
+  // The model picker. The button shows every model; typing narrows the list.
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [modelFilter, setModelFilter] = useState("");
+  const pickerRef = useRef<HTMLDivElement>(null);
+  const needle = modelFilter.trim().toLowerCase();
+  const visibleModels = needle ? models.filter((id) => id.toLowerCase().includes(needle)) : models;
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const close = (event: PointerEvent) => { if (!pickerRef.current?.contains(event.target as Node)) setPickerOpen(false); };
+    document.addEventListener("pointerdown", close);
+    return () => document.removeEventListener("pointerdown", close);
+  }, [pickerOpen]);
+
   // Seed the form exactly once, when the server values arrive. Re-seeding on
   // every store update is what used to wipe out text the user was typing.
   const seeded = useRef(false);
@@ -49,7 +62,12 @@ export function AISettingsForm() {
     try {
       const { models: list } = await apiListModels({ apiKey: apiKey.trim() || undefined, baseUrl: baseUrl.trim() || undefined });
       setModels(list);
-      if (!silent) setModelsStatus({ kind: "ok", text: `连接成功，共 ${list.length} 个模型` });
+      if (!silent) {
+        setModelsStatus({ kind: "ok", text: `连接成功，共 ${list.length} 个模型` });
+        // Asked for by hand: show what came back.
+        setModelFilter("");
+        setPickerOpen(list.length > 0);
+      }
     } catch (error) {
       setModels([]);
       if (!silent) setModelsStatus({ kind: "error", text: errorMessage(error, "获取模型列表失败") });
@@ -163,17 +181,52 @@ export function AISettingsForm() {
       <div>
         <label htmlFor="ai-model" className="mb-1 block text-sm font-medium">模型</label>
         <div className="flex gap-2">
-          <Input
-            id="ai-model"
-            list="ai-model-options"
-            value={model}
-            onChange={(e) => setModel(e.target.value)}
-            placeholder="从列表选择，或直接输入模型名"
-            className="flex-1"
-          />
-          <datalist id="ai-model-options">
-            {models.map((id) => <option key={id} value={id} />)}
-          </datalist>
+          {/* Not a <datalist>: that only offers options matching the text already
+              in the field, so with a model filled in the list looks empty. */}
+          <div ref={pickerRef} className="relative flex-1">
+            <Input
+              id="ai-model"
+              role="combobox"
+              aria-expanded={pickerOpen}
+              aria-controls="ai-model-options"
+              autoComplete="off"
+              value={model}
+              onChange={(e) => { setModel(e.target.value); setModelFilter(e.target.value); setPickerOpen(true); }}
+              onKeyDown={(e) => { if (e.key === "Escape") setPickerOpen(false); }}
+              placeholder="从列表选择，或直接输入模型名"
+              className="pr-10"
+            />
+            <button
+              type="button"
+              aria-label="展开模型列表"
+              disabled={models.length === 0}
+              onClick={() => { setModelFilter(""); setPickerOpen((open) => !open); }}
+              className="absolute right-0 top-0 flex h-full w-10 items-center justify-center text-[var(--muted-foreground)] disabled:opacity-40"
+            >
+              <ChevronDown className={`h-4 w-4 transition-transform ${pickerOpen ? "rotate-180" : ""}`} />
+            </button>
+            {pickerOpen && models.length > 0 && (
+              <ul
+                id="ai-model-options"
+                role="listbox"
+                className="absolute inset-x-0 top-full z-20 mt-1 max-h-64 overflow-y-auto rounded-md border border-[var(--border)] bg-[var(--card)] py-1 shadow-lg"
+              >
+                {visibleModels.length === 0 && <li className="px-3 py-2 text-sm text-[var(--muted-foreground)]">列表里没有匹配的模型，将按输入的名称保存</li>}
+                {visibleModels.map((id) => (
+                  <li key={id} role="option" aria-selected={id === model}>
+                    <button
+                      type="button"
+                      onClick={() => { setModel(id); setPickerOpen(false); }}
+                      className={`flex min-h-9 w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm hover:bg-[var(--accent)] ${id === model ? "font-medium text-[var(--primary)]" : ""}`}
+                    >
+                      <span className="min-w-0 break-all">{id}</span>
+                      {id === model && <Check className="h-4 w-4 shrink-0" />}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
           <Button type="button" variant="outline" onClick={() => loadModels()} disabled={modelsLoading} className="shrink-0 gap-1">
             <RefreshCw className={`h-4 w-4 ${modelsLoading ? "animate-spin" : ""}`} />
             {modelsLoading ? "获取中" : "获取模型"}
