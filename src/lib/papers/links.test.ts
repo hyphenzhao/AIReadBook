@@ -4,7 +4,7 @@ vi.mock("@/lib/prisma", () => ({ prisma: {} }));
 vi.mock("@/lib/ai/user-llm", () => ({ getUserLLM: vi.fn() }));
 vi.mock("@/lib/vector/papers", () => ({ paperCentroids: vi.fn() }));
 
-import { nearestPapers, tooCommon } from "./links";
+import { keywordBar, nearestPapers, tooCommon } from "./links";
 
 /** A unit vector at `degrees` in the plane: cosine between two is cos of the angle between them. */
 const at = (degrees: number) => new Float32Array([Math.cos((degrees * Math.PI) / 180), Math.sin((degrees * Math.PI) / 180)]);
@@ -27,6 +27,20 @@ describe("nearestPapers", () => {
   it("never links papers below the similarity threshold, however few there are", () => {
     const centroids = new Map([[1, at(0)], [2, at(80)]]);
     expect(nearestPapers(1, centroids)).toEqual([]);
+  });
+});
+
+describe("keywordBar", () => {
+  const idf = (papersWithNode: number, paperCount: number) => Math.log(1 + paperCount / papersWithNode);
+
+  it("lets one rare keyword link two papers, but asks for two common ones", () => {
+    expect(idf(3, 27)).toBeGreaterThanOrEqual(keywordBar(27));
+    expect(idf(6, 27)).toBeLessThan(keywordBar(27));
+    expect(idf(6, 27) + idf(9, 27)).toBeGreaterThanOrEqual(keywordBar(27));
+  });
+
+  it("does not get in the way of a small library", () => {
+    expect(idf(2, 4)).toBeGreaterThanOrEqual(keywordBar(4));
   });
 });
 

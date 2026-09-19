@@ -42,6 +42,15 @@ export function tooCommon(papersWithNode: number, paperCount: number) {
 }
 
 /**
+ * Keywords are the loosest kind of overlap. One shared keyword links two papers
+ * only if it is rare (three papers or fewer have it); otherwise it takes two.
+ * Expressed in the same rarity-weighted score the shared nodes are summed in.
+ */
+export function keywordBar(paperCount: number) {
+  return Math.log(1 + paperCount / 3);
+}
+
+/**
  * "Similar" is relative. In a library on one subject every pair clears a fixed
  * threshold, so a pair is linked only when one of the two counts the other
  * among its few nearest — and the threshold still keeps unrelated papers apart.
@@ -160,6 +169,7 @@ export async function computePaperLinks(paperId: number, options: { judge?: bool
       }
     }
     for (const entry of shared.values()) {
+      if (entry.type === "SHARED_KEYWORD" && entry.score < keywordBar(paperCount)) continue;
       drafts.push({ otherId: entry.otherId, type: entry.type, score: entry.score, evidence: { nodes: entry.nodes.slice(0, 12) }, origin: "AUTO" });
       bump(entry.otherId, entry.score);
     }
