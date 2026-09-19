@@ -27,6 +27,11 @@ model User {
   graphNodes      GraphNode[]
   graphEdges      GraphEdge[]
   readingProgress ReadingProgress[]
+  papers           Paper[]
+  paperCollections PaperCollection[]
+  paperTags        Tag[]
+  paperLinks       PaperLink[]
+  paperAnnotations PaperAnnotation[]
 
   @@map("users")
 }
@@ -109,10 +114,13 @@ model Annotation {
   @@map("annotations")
 }
 
+/// A conversation about a book or about a paper (exactly one of the two is set).
 model ChatSession {
   id        Int       @id @default(autoincrement())
-  bookId    Int       @map("book_id")
-  book      Book      @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  bookId    Int?      @map("book_id")
+  book      Book?     @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  paperId   Int?      @map("paper_id")
+  paper     Paper?    @relation(fields: [paperId], references: [id], onDelete: Cascade)
   chapterId Int?      @map("chapter_id")
   title     String    @db.VarChar(500)
   mode      String    @default("companion") @db.VarChar(20)
@@ -184,6 +192,8 @@ model Chunk {
   book       Book?      @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapterId  Int?       @map("chapter_id")
   chapter    Chapter?   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  paperId    Int?       @map("paper_id")
+  paper      Paper?     @relation(fields: [paperId], references: [id], onDelete: Cascade)
   /// Position within the chapter (or paper).
   ordinal    Int
   text       String     @db.MediumText
@@ -199,6 +209,7 @@ model Chunk {
   graphMentions  GraphMention[]
 
   @@index([bookId, chapterId, ordinal])
+  @@index([paperId, ordinal])
   @@index([userId, sourceType])
   @@fulltext([text], map: "ft_chunk_text")
   @@map("chunks")
@@ -225,6 +236,8 @@ model KnowledgeCard {
   book       Book?      @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapterId  Int?       @map("chapter_id")
   chapter    Chapter?   @relation(fields: [chapterId], references: [id], onDelete: SetNull)
+  paperId    Int?       @map("paper_id")
+  paper      Paper?     @relation(fields: [paperId], references: [id], onDelete: Cascade)
   chunkId    Int?       @map("chunk_id")
   chunk      Chunk?     @relation(fields: [chunkId], references: [id], onDelete: SetNull)
   cardType   String     @db.VarChar(20) @map("card_type")
@@ -237,6 +250,7 @@ model KnowledgeCard {
   createdAt  DateTime   @default(now()) @map("created_at")
 
   @@index([userId, bookId])
+  @@index([userId, paperId])
   @@map("knowledge_cards")
 }
 
@@ -252,6 +266,9 @@ model GraphNode {
   description String?    @db.Text
   /// Embedding of "name: description", used to merge near-duplicates.
   vec         Bytes?     @db.Blob
+  /// Set on the node that stands for a paper itself (type "paper").
+  paperId     Int?       @unique @map("paper_id")
+  paper       Paper?     @relation("PaperNode", fields: [paperId], references: [id], onDelete: Cascade)
   createdAt   DateTime   @default(now()) @map("created_at")
   updatedAt   DateTime   @updatedAt @map("updated_at")
 
@@ -307,6 +324,10 @@ model GraphMention {
   book       Book?      @relation(fields: [bookId], references: [id], onDelete: Cascade)
   chapterId  Int?       @map("chapter_id")
   chapter    Chapter?   @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  paperId    Int?       @map("paper_id")
+  paper      Paper?     @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  /// 1-based PDF page, for paper mentions.
+  page       Int?
   quote      String?    @db.Text
   confidence Float      @default(1)
   createdAt  DateTime   @default(now()) @map("created_at")
@@ -314,6 +335,7 @@ model GraphMention {
   @@index([nodeId])
   @@index([edgeId])
   @@index([chapterId])
+  @@index([paperId])
   @@map("graph_mentions")
 }
 
@@ -323,11 +345,14 @@ model ReadingProgress {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   bookId    Int?     @map("book_id")
   book      Book?    @relation(fields: [bookId], references: [id], onDelete: Cascade)
+  paperId   Int?     @map("paper_id")
+  paper     Paper?   @relation(fields: [paperId], references: [id], onDelete: Cascade)
   /// Books: { chapterIndex, ratio }. Papers: { page, scale, offsetRatio }.
   locator   Json
   updatedAt DateTime @updatedAt @map("updated_at")
 
   @@unique([userId, bookId])
+  @@unique([userId, paperId])
   @@map("reading_progress")
 }
 
@@ -372,4 +397,202 @@ model WebSearchCache {
 
   @@unique([provider, queryHash])
   @@map("web_search_cache")
+}
+
+// ---------------------------------------------------------------------------
+// Papers: a research library, separate from books. It shares the knowledge
+// foundation above (chunks, embeddings, cards, graph with scope = PAPER) but
+// has its own domain tables, because what matters here is how papers relate.
+// ---------------------------------------------------------------------------
+
+enum PaperStatus {
+  UNREAD
+  READING
+  READ
+}
+
+model Paper {
+  id        Int         @id @default(autoincrement())
+  userId    Int         @map("user_id")
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String      @db.VarChar(1000)
+  /// string[]
+  authors   Json
+  year      Int?
+  venue     String?     @db.VarChar(500)
+  doi       String?     @db.VarChar(255)
+  arxivId   String?     @db.VarChar(50) @map("arxiv_id")
+  abstract  String?     @db.Text
+  language  String?     @db.VarChar(10)
+  status    PaperStatus @default(UNREAD)
+  rating    Int?
+  notes     String?     @db.Text
+  pageCount Int         @default(0) @map("page_count")
+  /// Where the one-time processing pipeline stands: UPLOADED, EXTRACTING,
+  /// CHUNKING, EMBEDDING, ANALYZING, LINKING, READY — or NO_FILE, NEEDS_KEY, FAILED.
+  pipelineStage String  @default("UPLOADED") @db.VarChar(40) @map("pipeline_stage")
+  pipelineError String? @db.Text @map("pipeline_error")
+  createdAt DateTime    @default(now()) @map("created_at")
+  updatedAt DateTime    @updatedAt @map("updated_at")
+
+  file            PaperFile?
+  pages           PaperPage[]
+  analysis        PaperAnalysis?
+  chunks          Chunk[]
+  collections     PaperCollectionItem[]
+  tags            PaperTag[]
+  linksA          PaperLink[]       @relation("LinkA")
+  linksB          PaperLink[]       @relation("LinkB")
+  chatSessions    ChatSession[]
+  annotations     PaperAnnotation[]
+  knowledgeCards  KnowledgeCard[]
+  graphMentions   GraphMention[]
+  graphNode       GraphNode?        @relation("PaperNode")
+  readingProgress ReadingProgress[]
+
+  @@index([userId, status])
+  @@index([userId, doi])
+  @@fulltext([title, abstract], map: "ft_paper_title_abstract")
+  @@map("papers")
+}
+
+/// The original PDF, stored on disk outside the repository, content-addressed.
+model PaperFile {
+  paperId      Int    @id @map("paper_id")
+  paper        Paper  @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  userId       Int    @map("user_id")
+  sha256       String @db.VarChar(64)
+  bytes        Int
+  /// Relative to DATA_DIR.
+  path         String @db.VarChar(500)
+  originalName String @db.VarChar(500) @map("original_name")
+
+  /// The same PDF uploaded twice by one user is the same paper.
+  @@unique([userId, sha256])
+  @@map("paper_files")
+}
+
+/// One PDF page, extracted once at upload. The viewer renders the original
+/// PDF; this is what search, the AI and citation highlights read instead.
+model PaperPage {
+  id        Int     @id @default(autoincrement())
+  paperId   Int     @map("paper_id")
+  paper     Paper   @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  pageNo    Int     @map("page_no")
+  width     Float
+  height    Float
+  /// Offset of this page's text within the paper's full text (pages joined by a blank line).
+  charStart Int     @map("char_start")
+  text      String  @db.MediumText
+  /// gzip(JSON): [{ s, e, b: [x0, y0, x1, y1] }] — each text line's character
+  /// range within `text` and its box in PDF points, origin top-left.
+  layout    Bytes   @db.MediumBlob
+  isOcr     Boolean @default(false) @map("is_ocr")
+
+  @@unique([paperId, pageNo])
+  @@map("paper_pages")
+}
+
+/// Structured reading of a paper: research question, methods, datasets,
+/// findings, limitations, keywords — each with a verified quote.
+model PaperAnalysis {
+  paperId   Int      @id @map("paper_id")
+  paper     Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  data      Json
+  model     String   @db.VarChar(200)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("paper_analyses")
+}
+
+model PaperCollection {
+  id        Int               @id @default(autoincrement())
+  userId    Int               @map("user_id")
+  user      User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String            @db.VarChar(200)
+  parentId  Int?              @map("parent_id")
+  parent    PaperCollection?  @relation("CollectionTree", fields: [parentId], references: [id], onDelete: Cascade)
+  children  PaperCollection[] @relation("CollectionTree")
+  createdAt DateTime          @default(now()) @map("created_at")
+
+  items PaperCollectionItem[]
+
+  @@unique([userId, parentId, name])
+  @@map("paper_collections")
+}
+
+model PaperCollectionItem {
+  collectionId Int             @map("collection_id")
+  collection   PaperCollection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+  paperId      Int             @map("paper_id")
+  paper        Paper           @relation(fields: [paperId], references: [id], onDelete: Cascade)
+
+  @@id([collectionId, paperId])
+  @@map("paper_collection_items")
+}
+
+model Tag {
+  id     Int    @id @default(autoincrement())
+  userId Int    @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name   String @db.VarChar(100)
+
+  papers PaperTag[]
+
+  @@unique([userId, name])
+  @@map("tags")
+}
+
+model PaperTag {
+  paperId Int   @map("paper_id")
+  paper   Paper @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  tagId   Int   @map("tag_id")
+  tag     Tag   @relation(fields: [tagId], references: [id], onDelete: Cascade)
+
+  @@id([paperId, tagId])
+  @@map("paper_tags")
+}
+
+/// A typed relation between two papers, always stored with paperAId < paperBId.
+model PaperLink {
+  id       Int    @id @default(autoincrement())
+  userId   Int    @map("user_id")
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paperAId Int    @map("paper_a_id")
+  paperA   Paper  @relation("LinkA", fields: [paperAId], references: [id], onDelete: Cascade)
+  paperBId Int    @map("paper_b_id")
+  paperB   Paper  @relation("LinkB", fields: [paperBId], references: [id], onDelete: Cascade)
+  /// SHARED_KEYWORD, SHARED_METHOD, SHARED_DATASET, SIMILAR, AGREES, CONTRADICTS, EXTENDS, CITES
+  type     String @db.VarChar(30)
+  score    Float  @default(0)
+  /// What the link rests on: shared node names, or paired quotes from both papers.
+  evidence Json
+  /// AUTO (computed), LLM (judged from the findings), USER (added by hand)
+  origin   String @default("AUTO") @db.VarChar(10)
+  /// A link the user rejected; kept so it is not suggested again.
+  dismissed Boolean @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([paperAId, paperBId, type])
+  @@index([userId])
+  @@map("paper_links")
+}
+
+/// A highlight or note on a PDF, anchored by page and rectangles in PDF points.
+model PaperAnnotation {
+  id           Int      @id @default(autoincrement())
+  userId       Int      @map("user_id")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  paperId      Int      @map("paper_id")
+  paper        Paper    @relation(fields: [paperId], references: [id], onDelete: Cascade)
+  page         Int
+  /// [[x0, y0, x1, y1], ...]
+  rects        Json
+  selectedText String   @db.Text @map("selected_text")
+  note         String?  @db.Text
+  color        String   @default("yellow") @db.VarChar(20)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([paperId, page])
+  @@map("paper_annotations")
 }

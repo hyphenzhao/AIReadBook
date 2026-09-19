@@ -71,6 +71,7 @@ ensure_ngram() { # table, index, columns
 }
 ensure_ngram chapters ft_chapter_content "title, content"
 ensure_ngram chunks ft_chunk_text "text"
+ensure_ngram papers ft_paper_title_abstract "title, abstract"
 
 log "Type-check and unit tests"
 npx tsc --noEmit -p tsconfig.typecheck.json

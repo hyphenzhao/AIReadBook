@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { COOKIE_NAME, verifySessionToken } from "@/lib/session-token";
 
-const protectedPaths = ["/library", "/read", "/review", "/settings", "/mind-maps", "/graph"];
+const protectedPaths = ["/library", "/read", "/review", "/settings", "/mind-maps", "/graph", "/papers"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
