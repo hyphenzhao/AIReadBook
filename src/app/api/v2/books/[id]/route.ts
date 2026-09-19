@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { requireSessionUserId, sessionError } from "@/lib/auth-session";
+import { pruneGraph } from "@/lib/knowledge/graph-extract";
+import { invalidateBookVectors } from "@/lib/vector";
 
 /** One book with the text of its chapters, for the reader. */
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -32,6 +34,9 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!Number.isInteger(bookId)) return NextResponse.json({ error: "invalid book id" }, { status: 400 });
   const result = await prisma.book.deleteMany({ where: { id: bookId, userId } });
   if (!result.count) return NextResponse.json({ error: "book not found" }, { status: 404 });
+  // The cascade removed this book's graph mentions; drop the nodes nothing supports any more.
+  await pruneGraph(userId, "BOOK");
+  invalidateBookVectors(bookId);
   return NextResponse.json({ ok: true });
   } catch (error) {
     return sessionError(error);

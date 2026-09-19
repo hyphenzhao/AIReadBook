@@ -4,6 +4,7 @@ import { requireSessionUserId, sessionError } from "@/lib/auth-session";
 import { removeStored } from "@/lib/papers/storage";
 import { PAPER_SELECT, paperView } from "@/lib/papers/view";
 import { invalidatePaperVectors } from "@/lib/vector/papers";
+import { pruneGraph } from "@/lib/knowledge/graph-extract";
 
 type Params = { params: Promise<{ id: string }> };
 const STATUSES: PaperStatus[] = ["UNREAD", "READING", "READ"];
@@ -113,6 +114,9 @@ export async function DELETE(_req: Request, { params }: Params) {
     await prisma.paper.delete({ where: { id } });
     if (file) await removeStored(file.path).catch((error) => console.error("Could not remove PDF", error));
     await prisma.tag.deleteMany({ where: { userId, papers: { none: {} } } });
+    // The cascade removed this paper's mentions; keywords, methods and
+    // conclusions that no other paper supports must not linger in the graph.
+    await pruneGraph(userId, "PAPER");
     invalidatePaperVectors(userId);
     return Response.json({ ok: true });
   } catch (error) {
