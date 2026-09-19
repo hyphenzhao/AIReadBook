@@ -114,6 +114,15 @@ body {
     sans-serif;
 }
 
+/* pdf.js lays its pages out for the browser default, content-box. Under the
+   border-box above, the page's 9px border came out of its width: the PDF was
+   drawn 18px smaller than the text layer on top of it, so selections and
+   highlights drifted away from the words, more and more towards the bottom right. */
+.pdfViewer,
+.pdfViewer * {
+  box-sizing: content-box;
+}
+
 /* EPUB reader styles */
 .epub-container {
   height: 100%;

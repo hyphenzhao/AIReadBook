@@ -3,9 +3,9 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, Loader2, Minus, Plus, Search, X } from "lucide-react";
 import "pdfjs-dist/web/pdf_viewer.css";
+import { mergeLineBoxes, type PageBox } from "@/lib/papers/merge-boxes";
 
-/** A box on a page in PDF points, origin top-left — the same convention the server stores. */
-export type PageBox = [x0: number, y0: number, x1: number, y1: number];
+export type { PageBox };
 
 export interface PdfLocator { page: number; scale: number | string; offsetRatio: number }
 export interface PdfSelection { text: string; page: number; boxes: PageBox[]; x: number; y: number }
@@ -74,12 +74,16 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
     const layer = document.createElement("div");
     layer.className = "arb-highlights";
     layer.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:1;";
-    // Stored boxes are PDF points from the top-left; the viewport scale turns them into CSS pixels.
-    const scale = pageView.viewport.scale;
+    // Stored boxes are PDF points from the top-left. Placed as fractions of the
+    // page, they follow whatever size the page is drawn at, zooming included.
+    const width = pageView.viewport.width / pageView.viewport.scale;
+    const height = pageView.viewport.height / pageView.viewport.scale;
+    const percent = (value: number, of: number) => `${Math.round((value / of) * 1e5) / 1e3}%`;
     for (const item of items) {
-      for (const [x0, y0, x1, y1] of item.boxes) {
+      // Merged here as well: highlights saved earlier hold the browser's raw, doubled boxes.
+      for (const [x0, y0, x1, y1] of mergeLineBoxes(item.boxes)) {
         const box = document.createElement("div");
-        box.style.cssText = `position:absolute;left:${x0 * scale}px;top:${y0 * scale}px;width:${(x1 - x0) * scale}px;height:${(y1 - y0) * scale}px;background:${item.color};border-radius:2px;mix-blend-mode:multiply;`;
+        box.style.cssText = `position:absolute;left:${percent(x0, width)};top:${percent(y0, height)};width:${percent(x1 - x0, width)};height:${percent(y1 - y0, height)};background:${item.color};border-radius:2px;mix-blend-mode:multiply;`;
         if (item.flash) box.dataset.flash = "true";
         layer.appendChild(box);
       }
@@ -213,13 +217,15 @@ export const PdfViewer = forwardRef<PdfViewerHandle, Props>(function PdfViewer(
         const pageView = pageNumber ? viewer.getPageView(pageNumber - 1) : null;
         if (!pageDiv || !pageView?.viewport) return;
         const origin = pageDiv.getBoundingClientRect();
-        const scale = pageView.viewport.scale;
-        const boxes = [...range.getClientRects()]
+        // CSS pixels per PDF point, from the size the page really has on screen.
+        const scale = pageDiv.clientWidth / (pageView.viewport.width / pageView.viewport.scale);
+        // The browser reports a box per word, often twice over: one box per line is what gets stored.
+        const boxes = mergeLineBoxes([...range.getClientRects()]
           .filter((rect) => rect.width > 1 && rect.height > 1 && rect.bottom > origin.top && rect.top < origin.bottom)
           .map((rect): PageBox => [
             (rect.left - origin.left - pageDiv.clientLeft) / scale, (rect.top - origin.top - pageDiv.clientTop) / scale,
             (rect.right - origin.left - pageDiv.clientLeft) / scale, (rect.bottom - origin.top - pageDiv.clientTop) / scale,
-          ].map((n) => Math.round(n * 100) / 100) as PageBox);
+          ]));
         const bounds = range.getBoundingClientRect();
         callbacks.current.onSelection?.({ text, page: pageNumber, boxes, x: bounds.left + bounds.width / 2, y: bounds.top });
       };
