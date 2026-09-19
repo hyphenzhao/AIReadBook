@@ -49,7 +49,11 @@ npm install --no-audit --no-fund
 
 log "Syncing database schema"
 npx prisma generate
-npx prisma db push --skip-generate
+# Prisma stops on anything it calls possible data loss — which includes
+# harmless things like a unique index on a brand-new column. Read its warning,
+# and only then re-run this deploy with ACCEPT_SCHEMA_WARNINGS=1. Never make
+# the flag permanent: it would also wave through a dropped column.
+npx prisma db push --skip-generate ${ACCEPT_SCHEMA_WARNINGS:+--accept-data-loss}
 if [ -f prisma/post-push.sql ]; then
   MYSQL_PWD="$db_pass" mysql -h "$db_host" -u "$db_user" "$db_name" <prisma/post-push.sql
 fi
